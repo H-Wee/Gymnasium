@@ -10,6 +10,26 @@ from gymnasium.envs.registration import (
     spec,
 )
 
+register(
+    id="Sensor1DEnvSimple-v0",
+    entry_point="gymnasium.envs.classic_control.custom_env_1d_sensor_simple:Sensor1DEnvSimple",
+    reward_threshold=500.0,
+    max_episode_steps=500,
+)
+
+register(
+    id="Sensor1DEnvSimpleShuttler-v0",
+    entry_point="gymnasium.envs.classic_control.custom_env_1d_sensor_shuttler:Sensor1DEnvSimpleShuttler",
+    reward_threshold=500.0,
+    max_episode_steps=500,
+)
+
+register(
+    id="SensorEnv2DSimple-v0",
+    entry_point="gymnasium.envs.classic_control.custom_env_2d_sensor:SensorEnv2DSimple",
+    reward_threshold=500.0,
+    max_episode_steps=500,
+)
 
 # Classic
 # ----------------------------------------
