@@ -21,7 +21,7 @@ from tuning_toolkit.framework.autorunner_ana_1d_original import *
 from tuning_toolkit.framework.autorunner_utils_old import *
 
 from tuning_toolkit.framework.lead_transition_simulation import *
-
+from tuning_toolkit.framework.autorunner_sensor_sim import gaussian_dist
 
 # ========= logging
 # Configure basic logging settings
@@ -242,7 +242,7 @@ class Sensor1DEnvSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         self._sigma = sigma
 
         # print(f'amp: {self._amp}, sigma = {self._sigma}')
-        env_logger.info(f'amp: {self._amp}, sigma = {self._sigma}')
+        # env_logger.warnings(f'amp: {self._amp}, sigma = {self._sigma}')
         data = gaussian_dist(x=data_x, mu=self.size/2, sigma=sigma, amp=amp, size=self.size)
         self.state = data  # self._normalize_obs(data)
         state = self.state

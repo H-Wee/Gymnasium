@@ -25,6 +25,20 @@ register(
 )
 
 register(
+    id="Sensor1DEnvSimpleShuttler-v1",   # 2 Gauss!
+    entry_point="gymnasium.envs.classic_control.custom_env_1d_sensor_shuttler_2gauss:Sensor1DEnvSimpleShuttler2Gauss",
+    reward_threshold=500.0,
+    max_episode_steps=500,
+)
+
+register(
+    id="Sensor1DEnvSimpleWithMu-v0",
+    entry_point="gymnasium.envs.classic_control.custom_env_1d_sensor_with_mu:Sensor1DEnvSimpleWithMu",
+    reward_threshold=500.0,
+    max_episode_steps=500,
+)
+
+register(
     id="SensorEnv2DSimple-v0",
     entry_point="gymnasium.envs.classic_control.custom_env_2d_sensor:SensorEnv2DSimple",
     reward_threshold=500.0,

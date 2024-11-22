@@ -9,3 +9,5 @@ from gymnasium.envs.classic_control.pendulum import PendulumEnv
 from gymnasium.envs.classic_control.custom_env_2d_sensor import SensorEnv2DSimple
 from gymnasium.envs.classic_control.custom_env_1d_sensor_simple import Sensor1DEnvSimple
 from gymnasium.envs.classic_control.custom_env_1d_sensor_shuttler import Sensor1DEnvSimpleShuttler
+from gymnasium.envs.classic_control.custom_env_1d_sensor_with_mu import Sensor1DEnvSimpleWithMu
+from gymnasium.envs.classic_control.custom_env_1d_sensor_shuttler_2gauss import Sensor1DEnvSimpleShuttler2Gauss

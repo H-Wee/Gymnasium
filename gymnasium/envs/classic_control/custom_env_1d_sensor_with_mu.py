@@ -51,9 +51,8 @@ env_logger.addHandler(console_handler)
     with mu
 """
 
-
-class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,  # do we need those?
-                                ):
+class Sensor1DEnvSimpleWithMu(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,  # do we need those?
+                                     ):
 
     def __init__(self,
                  thresholds: Dict[str, Any],
@@ -68,6 +67,7 @@ class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Me
                  # use_seed: bool = False,
                  size: int = 100,
                  raw: bool = True,  # use bool by default
+                 physical_units: bool = False,
                  **kwargs,
                  ):
 
@@ -100,6 +100,7 @@ class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Me
         # data
         self.show = show
         self.show_ana = show_ana
+        self.physical_units = physical_units
         self.raw = raw
         # self.data = None    # it is a state anyway
         self.data_x = None
@@ -169,7 +170,10 @@ class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Me
         dyn_changer = 0.35  # np.random.rand()
         mu_changer = 2.  # init value is located at the middle
 
-        amp = 1 * slope_changer
+        if self.physical_units:
+            amp = 1 * slope_changer * 1e-8  # <----------- change this according to the physical units in the real experiment
+        else:
+            amp = 1 * slope_changer
         sigma = 10 * dyn_changer
         mu = self.size / 2
 
@@ -284,7 +288,7 @@ class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Me
         else:
             # slope_reward = abs(abs(self.ana.steepest_slope) - self.thresholds['steepest_slope']) *2
             slope_dist = 0.
-            slope_reward = 10  #  50.
+            slope_reward = 50.
         # print(f"Steepest slope : {self.ana.steepest_slope:.3f} vs. {self.thresholds['steepest_slope']:.3f}. Distance: {slope_dist:.4f}, Extra Reward: {slope_reward:.4f}")
         # env_logger.info(f"Steepest slope : {abs(self.ana.steepest_slope):.3f} vs. {self.thresholds['steepest_slope']:.3f}. Extra Reward: {slope_reward}")
 
@@ -295,7 +299,7 @@ class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Me
         else:
             # dyn_reward  = abs(self.ana.dynamic_range - self.thresholds['dynamic_range']) *2
             dyn_dist = 0.
-            dyn_reward = 10  # 50.
+            dyn_reward = 50.
         # print(f"Dynamic range : {self.ana.dynamic_range:.3f} vs. {self.thresholds['dynamic_range']:.3f}. Distance: {dyn_dist:.4f}, Extra Reward: {dyn_reward:.4f}")
         # env_logger.info(f"Dynamic range : {self.ana.dynamic_range:.3f} vs. {self.thresholds['dynamic_range']:.3f}. Extra Reward: {dyn_reward}")
 
@@ -378,19 +382,18 @@ class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Me
     def change_amp(self, action):
         """
                                    scale
-            AG2       +: increase ?     0.8 (1?)
-            CBL       +: decrease     - 0.3     (Claviature Barrier L)    <-- [ ] it might behave same as PSG ????
-            LPG:      +: decrease ?   - 0.05    (Left Pinchoff G0)        <-- [ ] is it similar to left PSG?
-            TBL/BBL   +: decrease ?   - 0.15
-            PL        +: decrease ?   - 0.2
+            AG2   +: increase ?     0.8 (1?)
+            PSG   +: decrease     - 0.3
+            LB1/2 +: decrease ?   - 0.15
+            LP1   +: decrease ?   - 0.2
 
         """
         # changes_gates = {'AG2': 0.8, 'PSG': -0.3, 'LB1': -0.15, 'LB2': -0.15, 'LP1': -0.2}
         # changes_gates = {'AG2': 80., 'PSG': -30., 'LB1': -15, 'LB2': -15, 'LP1': -20.}
-        # changes_gates = {'AG2': 120., 'PSG': -30., 'LB1': -10, 'LB2': -10, 'LP1': -20.}    # working one  21.05 at least before
 
-        # changes_gates = {'AG2': 120., 'CBL': -30., 'LPG': -5., 'TBL': -10, 'BBL': -10, 'PL': -20.}  # working one
-        changes_gates = {'AG2': 120., 'PSG': -30., 'LB1': -10, 'LB2': -10, 'LP1': 20.}  # from with Mu to compare
+        # changes_gates = {'AG2': 120., 'PSG': -30., 'LB1': -10, 'LB2': -10, 'LP1': -20.}    last good one???
+
+        changes_gates = {'AG2': 120., 'PSG': -30., 'LB1': -10, 'LB2': -10, 'LP1': 20.}  # changed plunger to +
 
         next_amp_ = copy.deepcopy(self._amp)
         next_amp = next_amp_
@@ -401,35 +404,29 @@ class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Me
             if self.show:
                 print(f"AG2 added {action[AG2_idx] * changes_gates['AG2']} change to amp: {next_amp}")
 
-        if 'CBL' in self.device_parameter.keys():
-            PSG_idx = np.where(np.array(list(self.device_parameter.keys())) == 'CBL')[0][0]
-            next_amp += action[PSG_idx] * changes_gates['CBL']
+        if 'PSG' in self.device_parameter.keys():
+            PSG_idx = np.where(np.array(list(self.device_parameter.keys())) == 'PSG')[0][0]
+            next_amp += action[PSG_idx] * changes_gates['PSG']
             if self.show:
-                print(f"PSG added {action[PSG_idx] * changes_gates['CBL']} change to amp: {next_amp}")
+                print(f"PSG added {action[PSG_idx] * changes_gates['PSG']} change to amp: {next_amp}")
 
-        if 'LPG' in self.device_parameter.keys():
-            PSG_idx = np.where(np.array(list(self.device_parameter.keys())) == 'LPG')[0][0]
-            next_amp += action[PSG_idx] * changes_gates['LPG']
+        if 'LB1' in self.device_parameter.keys():
+            LB1_idx = np.where(np.array(list(self.device_parameter.keys())) == 'LB1')[0][0]
+            next_amp += action[LB1_idx] * changes_gates['LB1']
             if self.show:
-                print(f"PSG added {action[PSG_idx] * changes_gates['LPG']} change to amp: {next_amp}")
+                print(f"LB1 added {action[LB1_idx] * changes_gates['LB1']} change to amp: {next_amp}")
 
-        if 'TBL' in self.device_parameter.keys():
-            LB1_idx = np.where(np.array(list(self.device_parameter.keys())) == 'TBL')[0][0]
-            next_amp += action[LB1_idx] * changes_gates['TBL']
+        if 'LB2' in self.device_parameter.keys():
+            LB2_idx = np.where(np.array(list(self.device_parameter.keys())) == 'LB2')[0][0]
+            next_amp += action[LB2_idx] * changes_gates['LB2']
             if self.show:
-                print(f"LB1 added {action[LB1_idx] * changes_gates['TBL']} change to amp: {next_amp}")
+                print(f"LB1 added {action[LB2_idx] * changes_gates['LB2']} change to amp: {next_amp}")
 
-        if 'BBL' in self.device_parameter.keys():
-            LB2_idx = np.where(np.array(list(self.device_parameter.keys())) == 'BBL')[0][0]
-            next_amp += action[LB2_idx] * changes_gates['BBL']
+        if 'LP1' in self.device_parameter.keys():
+            LP1_idx = np.where(np.array(list(self.device_parameter.keys())) == 'LP1')[0][0]
+            next_amp += action[LP1_idx] * changes_gates['LP1']
             if self.show:
-                print(f"LB1 added {action[LB2_idx] * changes_gates['BBL']} change to amp: {next_amp}")
-
-        if 'PL' in self.device_parameter.keys():
-            LP1_idx = np.where(np.array(list(self.device_parameter.keys())) == 'PL')[0][0]
-            next_amp += action[LP1_idx] * changes_gates['PL']
-            if self.show:
-                print(f"LP1 added {action[LP1_idx] * changes_gates['PL']} change to amp: {next_amp}")
+                print(f"LP1 added {action[LP1_idx] * changes_gates['LP1']} change to amp: {next_amp}")
 
         if self.show:
             print(f'Final next amp: {next_amp}\n')
@@ -440,18 +437,16 @@ class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Me
         """
                                    scale
             AG2   +: decrease ?   + 0.3 (1?)
-            CBL   +: increase     - 0.5
-            LPG   +: increase     - 0.08
-            TBL/BBL +: decrease ?   - 0.3
-            PL   +: decrease ?   - 0.3
+            PSG   +: increase     - 0.5
+            LB1/2 +: decrease ?   - 0.3
+            LP1   +: decrease ?   - 0.3
 
         """
         # changes_gates = {'AG2': 0.3, 'PSG': -0.5, 'LB1': -0.3, 'LB2': -0.3, 'LP1': -0.3}
         # changes_gates = {'AG2': 100., 'PSG': -50, 'LB1': -30, 'LB2': -30, 'LP1': -30}
-        # changes_gates = {'AG2': 150., 'PSG': -50, 'LB1': -15, 'LB2': -15, 'LP1': -15}     # working one
 
-        # changes_gates = {'AG2': 150., 'CBL': -50, 'LPG': -8, 'TBL': -15, 'BBL': -15, 'PL': -15}  # working one
-        changes_gates = {'AG2': 150., 'PSG': -50, 'LB1': -15, 'LB2': -15, 'LP1': 15}  # from with Mu to compare
+        # changes_gates = {'AG2': 150., 'PSG': -50, 'LB1': -15, 'LB2': -15, 'LP1': -15}  # last good one??
+        changes_gates = {'AG2': 150., 'PSG': -50, 'LB1': -15, 'LB2': -15, 'LP1': 15}  # changed plunger to +
 
         next_sigma_ = copy.deepcopy(self._sigma)
         next_sigma = next_sigma_
@@ -462,35 +457,29 @@ class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Me
             if self.show:
                 print(f"AG2 added {action[AG2_idx] * changes_gates['AG2']} change to sigma: {next_sigma}.")
 
-        if 'CBL' in self.device_parameter.keys():
-            PSG_idx = np.where(np.array(list(self.device_parameter.keys())) == 'CBL')[0][0]
-            next_sigma += action[PSG_idx] * changes_gates['CBL']
+        if 'PSG' in self.device_parameter.keys():
+            PSG_idx = np.where(np.array(list(self.device_parameter.keys())) == 'PSG')[0][0]
+            next_sigma += action[PSG_idx] * changes_gates['PSG']
             if self.show:
-                print(f"PSG added {action[PSG_idx] * changes_gates['CBL']} change to sigma: {next_sigma}")
+                print(f"PSG added {action[PSG_idx] * changes_gates['PSG']} change to sigma: {next_sigma}")
 
-        if 'LPG' in self.device_parameter.keys():
-            PSG_idx = np.where(np.array(list(self.device_parameter.keys())) == 'LPG')[0][0]
-            next_sigma += action[PSG_idx] * changes_gates['LPG']
+        if 'LB1' in self.device_parameter.keys():
+            LB1_idx = np.where(np.array(list(self.device_parameter.keys())) == 'LB1')[0][0]
+            next_sigma += action[LB1_idx] * changes_gates['LB1']
             if self.show:
-                print(f"PSG added {action[PSG_idx] * changes_gates['LPG']} change to sigma: {next_sigma}")
+                print(f"LB1 added {action[LB1_idx] * changes_gates['LB1']} change to sigma: {next_sigma}.")
 
-        if 'TBL' in self.device_parameter.keys():
-            LB1_idx = np.where(np.array(list(self.device_parameter.keys())) == 'TBL')[0][0]
-            next_sigma += action[LB1_idx] * changes_gates['TBL']
+        if 'LB2' in self.device_parameter.keys():
+            LB2_idx = np.where(np.array(list(self.device_parameter.keys())) == 'LB2')[0][0]
+            next_sigma += action[LB2_idx] * changes_gates['LB2']
             if self.show:
-                print(f"LB1 added {action[LB1_idx] * changes_gates['TBL']} change to sigma: {next_sigma}.")
+                print(f"LB1 added {action[LB2_idx] * changes_gates['LB2']} change to sigma: {next_sigma}")
 
-        if 'BBL' in self.device_parameter.keys():
-            LB2_idx = np.where(np.array(list(self.device_parameter.keys())) == 'BBL')[0][0]
-            next_sigma += action[LB2_idx] * changes_gates['BBL']
+        if 'LP1' in self.device_parameter.keys():
+            LP1_idx = np.where(np.array(list(self.device_parameter.keys())) == 'LP1')[0][0]
+            next_sigma += action[LP1_idx] * changes_gates['LP1']
             if self.show:
-                print(f"LB1 added {action[LB2_idx] * changes_gates['BBL']} change to sigma: {next_sigma}")
-
-        if 'PL' in self.device_parameter.keys():
-            LP1_idx = np.where(np.array(list(self.device_parameter.keys())) == 'PL')[0][0]
-            next_sigma += action[LP1_idx] * changes_gates['PL']
-            if self.show:
-                print(f"LP1 added {action[LP1_idx] * changes_gates['PL']} change to sigma: {next_sigma}.")
+                print(f"LP1 added {action[LP1_idx] * changes_gates['LP1']} change to sigma: {next_sigma}.")
 
         if self.show:
             print(f'Final next sigma: {next_sigma}\n')
@@ -509,13 +498,9 @@ class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Me
         # changes_gates = {'AG2': 0.3, 'PSG': -0.5, 'LB1': -0.3, 'LB2': -0.3, 'LP1': -0.3}
         # changes_gates = {'AG2': 100., 'PSG': -50, 'LB1': -30, 'LB2': -30, 'LP1': -30}
 
-        # changes_gates = {'AG2': 20000., 'PSG': -500, 'LB1': -10, 'LB2': 10, 'LP1': -0}    # working one before 21.05
-
-        # changes_gates = {'AG2': 20000., 'CBL': -500, 'LPG': -500, 'TBL': -10, 'BBL': 10,
-        #                  'PL': -0}  # working one before 21.05
-        # changes_gates = {k: v * 0.01 for k, v in changes_gates.items()}  # reduced by 2
-        changes_gates = {'AG2': 20000., 'PSG': -500, 'LB1': -10, 'LB2': 10, 'LP1': 100}  # from with Mu to compare
-        changes_gates = {k: v * 0.01 for k, v in changes_gates.items()}  # from with Mu to compare
+        # changes_gates = {'AG2': 20000., 'PSG': -500, 'LB1': -10, 'LB2': 10, 'LP1': -0}  # last good ones
+        changes_gates = {'AG2': 20000., 'PSG': -500, 'LB1': -10, 'LB2': 10, 'LP1': 100}  # changed plunger to +
+        changes_gates = {k: v * 0.01 for k, v in changes_gates.items()}  # reduced by 2
 
         next_mu_ = copy.deepcopy(self._mu)
         next_mu = next_mu_
@@ -523,39 +508,43 @@ class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Me
         if 'AG2' in self.device_parameter.keys():
             AG2_idx = np.where(np.array(list(self.device_parameter.keys())) == 'AG2')[0][0]
             next_mu += action[AG2_idx] * changes_gates['AG2']
+
+            # next_mu += action[AG2_idx] + changes_gates['AG2']
             if self.show:
                 print(f"AG2 added {action[AG2_idx] * changes_gates['AG2']} change to mu: {next_mu}.")
 
-        if 'CBL' in self.device_parameter.keys():
-            PSG_idx = np.where(np.array(list(self.device_parameter.keys())) == 'CBL')[0][0]
-            next_mu += action[PSG_idx] * changes_gates['CBL']
-            if self.show:
-                print(f"PSG added {action[PSG_idx] * changes_gates['CBL']} change to mu: {next_mu}")
+        if 'PSG' in self.device_parameter.keys():
+            PSG_idx = np.where(np.array(list(self.device_parameter.keys())) == 'PSG')[0][0]
+            next_mu += action[PSG_idx] * changes_gates['PSG']
 
-        if 'LPG' in self.device_parameter.keys():
-            PSG_idx = np.where(np.array(list(self.device_parameter.keys())) == 'LPG')[0][0]
-            next_mu += action[PSG_idx] * changes_gates['LPG']
+            # next_mu += action[PSG_idx] + changes_gates['PSG']
             if self.show:
-                print(f"PSG added {action[PSG_idx] * changes_gates['LPG']} change to mu: {next_mu}")
+                print(f"PSG added {action[PSG_idx] * changes_gates['PSG']} change to mu: {next_mu}")
 
-        if 'TBL' in self.device_parameter.keys():
-            LB1_idx = np.where(np.array(list(self.device_parameter.keys())) == 'TBL')[0][0]
-            next_mu += action[LB1_idx] * changes_gates['TBL']
+        if 'LB1' in self.device_parameter.keys():
+            LB1_idx = np.where(np.array(list(self.device_parameter.keys())) == 'LB1')[0][0]
+            next_mu += action[LB1_idx] * changes_gates['LB1']
+
+            # next_mu += action[LB1_idx] + changes_gates['LB1']
             if self.show:
                 print(
-                    f"LB1 added {action[LB1_idx]}, {changes_gates['TBL']}, {action[LB1_idx] * changes_gates['TBL']} change to mu: {next_mu}.")
+                    f"LB1 added {action[LB1_idx]}, {changes_gates['LB1']}, {action[LB1_idx] * changes_gates['LB1']} change to mu: {next_mu}.")
 
-        if 'BBL' in self.device_parameter.keys():
-            LB2_idx = np.where(np.array(list(self.device_parameter.keys())) == 'BBL')[0][0]
-            next_mu += action[LB2_idx] * changes_gates['BBL']
-            if self.show:
-                print(f"LB1 added {action[LB2_idx] * changes_gates['BBL']} change to mu: {next_mu}")
+        if 'LB2' in self.device_parameter.keys():
+            LB2_idx = np.where(np.array(list(self.device_parameter.keys())) == 'LB2')[0][0]
+            next_mu += action[LB2_idx] * changes_gates['LB2']
 
-        if 'PL' in self.device_parameter.keys():
-            LP1_idx = np.where(np.array(list(self.device_parameter.keys())) == 'PL')[0][0]
-            next_mu += action[LP1_idx] * changes_gates['PL']
+            # next_mu += action[LB2_idx] + changes_gates['LB2']
             if self.show:
-                print(f"LP1 added {action[LP1_idx] * changes_gates['PL']} change to mu: {next_mu}.")
+                print(f"LB1 added {action[LB2_idx] * changes_gates['LB2']} change to mu: {next_mu}")
+
+        if 'LP1' in self.device_parameter.keys():
+            LP1_idx = np.where(np.array(list(self.device_parameter.keys())) == 'LP1')[0][0]
+            next_mu += action[LP1_idx] * changes_gates['LP1']
+
+            # next_mu += action[LP1_idx] + changes_gates['LP1']
+            if self.show:
+                print(f"LP1 added {action[LP1_idx] * changes_gates['LP1']} change to mu: {next_mu}.")
 
         if self.show:
             print(f'Final next mu: {next_mu}\n')
@@ -609,8 +598,8 @@ class Sensor1DEnvSimpleShuttler(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Me
 
         if not self.observation_space.contains(state):
             # Adjust the initial observation to ensure it falls within the observation space
-            env_logger.warning(
-                f"[warning] The observation {state} is not within the observation space {self.observation_space}. We clip it.")
+            # env_logger.warning(
+            #     f"[warning] The observation {state} is not within the observation space {self.observation_space}. We clip it.")
             state = np.clip(state, self.observation_space.low, self.observation_space.high)
 
         return state
