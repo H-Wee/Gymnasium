@@ -20,28 +20,35 @@ register(
 register(
     id="Sensor1DEnvSimpleShuttler-v0",
     entry_point="gymnasium.envs.classic_control.custom_env_1d_sensor_shuttler:Sensor1DEnvSimpleShuttler",
-    reward_threshold=500.0,
+    reward_threshold=1000.0,
     max_episode_steps=500,
 )
 
 register(
-    id="Sensor1DEnvSimpleShuttler-v1",   # 2 Gauss!
+    id="Sensor1DEnvSimpleShuttler-v1",   # 2 Gauss!   --> Not done yet
     entry_point="gymnasium.envs.classic_control.custom_env_1d_sensor_shuttler_2gauss:Sensor1DEnvSimpleShuttler2Gauss",
-    reward_threshold=500.0,
+    reward_threshold=1000.0,
+    max_episode_steps=500,
+)
+
+register(
+    id="Sensor1DEnvShuttlerNGauss-v0",    # N gauss
+    entry_point="gymnasium.envs.classic_control.custom_env_1d_sensor_shuttler_N_gauss:Sensor1DEnvShuttlerNGauss",
+    reward_threshold=1000.0,
     max_episode_steps=500,
 )
 
 register(
     id="Sensor1DEnvSimpleWithMu-v0",
     entry_point="gymnasium.envs.classic_control.custom_env_1d_sensor_with_mu:Sensor1DEnvSimpleWithMu",
-    reward_threshold=500.0,
+    reward_threshold=1000.0,
     max_episode_steps=500,
 )
 
 register(
     id="SensorEnv2DSimple-v0",
     entry_point="gymnasium.envs.classic_control.custom_env_2d_sensor:SensorEnv2DSimple",
-    reward_threshold=500.0,
+    reward_threshold=1000.0,
     max_episode_steps=500,
 )
 

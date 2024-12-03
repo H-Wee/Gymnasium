@@ -16,11 +16,11 @@ from typing import Union, List, Dict, Callable, Any, Optional
 
 import tuning_toolkit.framework as ttf
 from tuning_toolkit.framework.autorunner_basic_functions import *
-from tuning_toolkit.framework.autorunner_ana_1d_original import *
+from tuning_toolkit.framework.autorunner_ana_1d import *
 # from tuning_toolkit.framework.autorunner_ana_2d import *
 from tuning_toolkit.framework.autorunner_utils_old import *
 
-from tuning_toolkit.framework.lead_transition_simulation import *
+from tuning_toolkit.simulation.lead_transition_simulation import *
 from tuning_toolkit.framework.autorunner_sensor_sim import gaussian_dist
 
 # ========= logging

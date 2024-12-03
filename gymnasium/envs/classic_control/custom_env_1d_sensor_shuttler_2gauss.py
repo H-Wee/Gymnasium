@@ -218,17 +218,6 @@ class Sensor1DEnvSimpleShuttler2Gauss(gym.Env, ttf.skeleton.Evaluator, ttf.skele
         else:
             show = self.show
 
-        #         action_ = action
-        #         if not self.action_space.contains(action_):
-        #             print(f"Action {action_} is not within action space. We clip the action to {np.clip(action_, self.action_space.low, self.action_space.high)}.")
-        #             # env_logger.warning(f"[warning] Action {action} is not within action space {self.action_space}. We clip the action.")
-        #             clip_action = np.clip(action_, self.action_space.low, self.action_space.high)
-        #         else:
-        #             clip_action = action_
-
-        #         action = self._normalize_action(clip_action)
-        #         print(f"[info] Action {clip_action} is normalized to {action}.")
-
         action_ = action
         action = self._normalize_action(action_)
         if self.show:
