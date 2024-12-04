@@ -203,17 +203,20 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         normalize based on
         have to take - into account!
         """
-        lower_b = - np.array(list(self.max_del_v_dict.values()), dtype=np.float64)
-        high_b = np.array(list(self.max_del_v_dict.values()), dtype=np.float64)
-        # lower_b = -1.  # 0.
-        # high_b = 1.     # this will make the action always cut the its boundary... as it changes quite a lot in the action space
+        # lower_b = - np.array(list(self.max_del_v_dict.values()), dtype=np.float64)
+        # high_b = np.array(list(self.max_del_v_dict.values()), dtype=np.float64)
+
+        low_bound_v = - np.array(list(self.max_del_v_dict.values()), dtype=np.float64)
+        high_bound_v = np.array(list(self.max_del_v_dict.values()), dtype=np.float64)
+        lower_b = -1.  # 0.
+        high_b = 1.     # this will make the action always cut the its boundary... as it changes quite a lot in the action space
 
         norm_factor = (action - self.action_space.low) / (self.action_space.high - self.action_space.low)
         real_action = norm_factor * (high_b - lower_b) + lower_b
 
         # NOTE: made change here! and undo the change in limit gate voltage! basically the same though
         # Clip real-world action within bounds
-        clipped_action = np.clip(real_action, lower_b, high_b)
+        clipped_action = np.clip(real_action, low_bound_v, high_bound_v)
         return clipped_action
 
     def _normalize_obs(self, state):
@@ -274,7 +277,9 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         return state, info
 
     def step(self, action, use_seed=False, **kwargs):  # debug True for now  stepsizes ---> give error
-
+        # print(action)
+        # print(len(action))
+        # print(type(action))
         if self.show_only_True:
             self.show = False
             self.show_ana = False
@@ -310,6 +315,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
             action = np.clip(action, self.action_space.low, self.action_space.high)
         else:
             action = action
+        # print(action)
 
         # ============================
         #   change gate voltages
@@ -480,6 +486,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         #  out of window
         # ===============
         noise_lvl_passed = []
+        noise_lvl_passed_bool = []
         noise_lvl_reward = 0
         if 'noise_level' in self.thresholds:
             for noise_lvl in self.noise_lvls:
@@ -488,10 +495,12 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
                     # extra_reward -= 50
                     noise_lvl_reward -= 10
                     noise_lvl_passed.append('X')
+                    noise_lvl_passed_bool.append(False)
                 else:
                     # extra_reward += 50
                     # noise_lvl_reward += 50
                     noise_lvl_passed.append('O')
+                    noise_lvl_passed_bool.append(True)
         else:
             print("No noise level defined. This is make the barrier calibration less robust.")
         extra_reward += noise_lvl_reward
@@ -502,6 +511,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         #  out of window 2: peaks
         # ========================
         oow_n_peaks_passed = []
+        oow_n_peaks_passed_bool = []
         oow_n_peaks_reward = 0
         for oow_n_peak in self.n_peaks:
             # for each line cut
@@ -509,10 +519,12 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
                 # extra_reward -= 50
                 oow_n_peaks_reward -= 50
                 oow_n_peaks_passed.append('X')
+                oow_n_peaks_passed_bool.append(False)
             else:
                 # extra_reward += 50
                 # noise_lvl_reward += 50
                 oow_n_peaks_passed.append('O')
+                oow_n_peaks_passed_bool.append(True)
 
         extra_reward += oow_n_peaks_reward
         """
@@ -532,8 +544,10 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         #     len(self.ana.peaks) >= self.thresholds['peaks'] and \
         #     self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:  # added n_peaks!
         if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and \
-                self.avg_n_peaks >= self.thresholds['peaks'] and \
+                self.avg_dyn >= self.thresholds['dynamic_range'] and \
+                all(oow_n_peaks_passed_bool) and \
                 self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:  # added n_peaks!
+                # self.avg_n_peaks >= self.thresholds['peaks'] and \
 
             terminated = True
 
@@ -565,15 +579,15 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
                 ['N peaks', f'{self.avg_n_peaks}', f"{self.thresholds['peaks']:.3f}", f"{peaks_dist:.4f}",
                  n_peak_passed, f"{peaks_reward:.4f}"],
 
-                ['N peaks (indiv) not included yet', [f'{oow_p:.3e}' for oow_p in self.n_peaks], f"{self.thresholds['peaks']:.3f}", "",
+                ['N peaks (indiv)', [f'{oow_p:.3e}' for oow_p in self.n_peaks], f"{self.thresholds['peaks']:.3f}", oow_n_peaks_passed_bool,
                  oow_n_peaks_passed, f"{oow_n_peaks_reward:.4f}"],
 
-                ['Peak increasing (std)', f'{self.sum_peaks_inc_std:.3e}',
+                ['Peak increasing (sum. std)', f'{self.sum_peaks_inc_std:.3e}',
                  f"{self.thresholds['sum_peaks_inc_std']:.3e}", f"{del_pinc_stds_dist:.4f}", peak_inc_fit_passed,
                  f"{del_pinc_stds_reward:.4f}"],
 
                 ## noise
-                ['Current level', [f'{nl:.3e}' for nl in self.noise_lvls], f"{self.thresholds['noise_level']:.3e}", "",   # f'{nl:.3e}' for nl in self.noise_lvls
+                ['Current level', [f'{nl:.3e}' for nl in self.noise_lvls], f"{self.thresholds['noise_level']:.3e}", noise_lvl_passed_bool,   # f'{nl:.3e}' for nl in self.noise_lvls
                  noise_lvl_passed, f"{noise_lvl_reward:.4f}"],
                 ['', '', '', '', '', ''],
                 ['[Reward]', '', '', '', '', ''],
@@ -613,7 +627,6 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
 
     def evaluate(self, **kwargs):  # show not needed but fine   show=True,
 
-        print(f"What is happening?")
         dyns = []
         # del_dyn = []
         steepest_slopes = []
@@ -645,7 +658,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
             prominence_guess = mean + 1.5 * std_dev  # 2 being too large? k=2 for moderate peaks
             prominence_guess /= 8.5   #  5 was too high, 10 was too low, I will choose in between 7.5 too high
 
-            print(f"{mean=}, {std_dev=}")
+            # print(f"{mean=}, {std_dev=}")
             peak_pars = {'prominence': prominence_guess,
                          'width': len(data) * window_ratio}  # width_guess -> this depends on charging E
 
