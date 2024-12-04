@@ -486,7 +486,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
                 # for each line cut
                 if noise_lvl < self.thresholds['noise_level']:
                     # extra_reward -= 50
-                    noise_lvl_reward -= 20
+                    noise_lvl_reward -= 10
                     noise_lvl_passed.append('X')
                 else:
                     # extra_reward += 50
@@ -495,6 +495,8 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         else:
             print("No noise level defined. This is make the barrier calibration less robust.")
         extra_reward += noise_lvl_reward
+
+        # TODO: does not really help for the out of range but maybe?
 
         # ========================
         #  out of window 2: peaks
@@ -505,16 +507,14 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
             # for each line cut
             if oow_n_peak < self.thresholds['peaks']:
                 # extra_reward -= 50
-                oow_n_peaks_reward -= 20
+                oow_n_peaks_reward -= 50
                 oow_n_peaks_passed.append('X')
             else:
                 # extra_reward += 50
                 # noise_lvl_reward += 50
                 oow_n_peaks_passed.append('O')
 
-        # extra_reward += oow_n_peaks_reward
-
-
+        extra_reward += oow_n_peaks_reward
         """
             terminate condition:
                 above threshold
@@ -543,7 +543,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
             reward = -10  # -100.  # How to scale this? T-T
 
         tot_reward_ = extra_reward + reward
-        tot_reward = tot_reward_ / 1e1  # 1e2  # 1e3  # scaling
+        tot_reward = tot_reward_ / 1e2  #  # 1e1  # 1e3  # scaling
 
         dist_passed_rewards = {'slope': [slope_dist, slope_passed, slope_reward],
                                'dyn': [dyn_dist, dyn_passed, dyn_reward],
@@ -613,6 +613,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
 
     def evaluate(self, **kwargs):  # show not needed but fine   show=True,
 
+        print(f"What is happening?")
         dyns = []
         # del_dyn = []
         steepest_slopes = []
@@ -628,27 +629,30 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         # del_steepest_slope = []
         for data, data_x in zip(self.state, self.data_x):
             # TODO: edit in the Ana1D file! there are too many places to change so for now I will just put it here
-            if self.ana_pars['smooth_pars'] is None:
-                smooth_window = 0.08  # 0.05   # 0.1 too smooth? # 0.08
-                smooth_pars = {'window_size': int(np.ceil(len(data) * smooth_window)),
-                               'filter_order': 2}
+            # FIXME: hardcoded!
+            # if self.ana_pars['smooth_pars'] is None:
+            smooth_window = 0.08  # 0.05   # 0.1 too smooth? # 0.08
+            smooth_pars = {'window_size': int(np.ceil(len(data) * smooth_window)),
+                           'filter_order': 2}
 
-                self.ana_pars['smooth_pars'] = smooth_pars
+            self.ana_pars['smooth_pars'] = smooth_pars
 
-            if self.ana_pars['peak_pars'] is None:
-                window_ratio = 0.02  # 0.01
+            # if self.ana_pars['peak_pars'] is None:
+            window_ratio = 0.02  # 0.01
 
-                mean = np.mean(data)
-                std_dev = np.std(data)
-                prominence_guess = mean + 1.5 * std_dev  # 2 being too large? k=2 for moderate peaks
-                prominence_guess /= 8.5   #  5 was too high, 10 was too low, I will choose in between 7.5 too high
+            mean = np.mean(data)
+            std_dev = np.std(data)
+            prominence_guess = mean + 1.5 * std_dev  # 2 being too large? k=2 for moderate peaks
+            prominence_guess /= 8.5   #  5 was too high, 10 was too low, I will choose in between 7.5 too high
 
-                peak_pars = {'prominence': prominence_guess,
-                             'width': len(data) * window_ratio}  # width_guess -> this depends on charging E
+            print(f"{mean=}, {std_dev=}")
+            peak_pars = {'prominence': prominence_guess,
+                         'width': len(data) * window_ratio}  # width_guess -> this depends on charging E
 
-                self.ana_pars['peak_pars'] = peak_pars
+            self.ana_pars['peak_pars'] = peak_pars
             # print(f"{self.ana_pars['smooth_pars']=}")
 
+            assert self.ana_pars['peak_pars'] is not None and self.ana_pars['smooth_pars'] is not None
             data_ana1d = Ana1D(data=data,
                                data_x=data_x,
                                peak_pars=self.ana_pars['peak_pars'],
