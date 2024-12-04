@@ -52,6 +52,15 @@ register(
     max_episode_steps=500,
 )
 
+
+register(
+    id="PatternTrackingEnv-v0",
+    entry_point="gymnasium.envs.classic_control.pattern_tracking:PatternTrackingEnv",
+    reward_threshold=1000.0,
+    max_episode_steps=500,
+)
+
+
 # Classic
 # ----------------------------------------
 

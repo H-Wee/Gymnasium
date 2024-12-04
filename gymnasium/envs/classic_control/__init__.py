@@ -12,3 +12,4 @@ from gymnasium.envs.classic_control.custom_env_1d_sensor_shuttler import Sensor1
 from gymnasium.envs.classic_control.custom_env_1d_sensor_with_mu import Sensor1DEnvSimpleWithMu
 from gymnasium.envs.classic_control.custom_env_1d_sensor_shuttler_2gauss import Sensor1DEnvSimpleShuttler2Gauss
 from gymnasium.envs.classic_control.custom_env_1d_sensor_shuttler_N_gauss import Sensor1DEnvShuttlerNGauss
+from gymnasium.envs.classic_control.pattern_tracking import PatternTrackingEnv

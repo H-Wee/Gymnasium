@@ -502,7 +502,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
                     noise_lvl_passed.append('O')
                     noise_lvl_passed_bool.append(True)
         else:
-            print("No noise level defined. This is make the barrier calibration less robust.")
+            print("[warning] No noise level defined. This is make the barrier calibration less robust.")
         extra_reward += noise_lvl_reward
 
         # TODO: does not really help for the out of range but maybe?
@@ -562,6 +562,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         dist_passed_rewards = {'slope': [slope_dist, slope_passed, slope_reward],
                                'dyn': [dyn_dist, dyn_passed, dyn_reward],
                                'n_peaks': [peaks_dist, n_peak_passed, peaks_reward],
+                               'oof_n_peaks': [0, oow_n_peaks_passed_bool, oow_n_peaks_reward],
                                'peak_increasing': [del_pinc_stds_dist, peak_inc_fit_passed, del_pinc_stds_reward]}
 
         self.dist_passed_rewards = dist_passed_rewards
