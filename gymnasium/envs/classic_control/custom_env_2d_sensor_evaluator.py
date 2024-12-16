@@ -15,11 +15,13 @@ import matplotlib.backends.backend_agg as agg
 import pylab
 import copy
 import torch
+import xarray as xr
 import os
 from tabulate import tabulate
 
 from typing import Union, List, Dict, Callable, Any, Optional
 
+import tuning_toolkit
 import tuning_toolkit.framework as ttf
 # from tuning_toolkit.framework.autorunner_basic_functions import *
 from tuning_toolkit.framework.autorunner_ana_1d import Ana1D
@@ -59,7 +61,7 @@ env_logger.addHandler(console_handler)
 """
 
 
-class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,  # do we need those?
+class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,  # do we need those?
                         ):
 
     def __init__(self,
@@ -67,6 +69,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
                  device_parameter: Dict[str, Any],
                  max_del_v: Dict[str, Any],
                  measurement,
+                 evaluator,
                  # sweep_gate_name: str = None,   # i guess str is enough
                  # max_del_v: List[float] = None,
                  # at_bounds_strategy: str = 'push',
@@ -160,6 +163,11 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         # ===========
         #  Ana stuff
         # ===========
+        self.evaluator = evaluator
+        # self.peak_wheel_pars =
+        # self.smooth_wheel_pars =
+
+
         self.ana = None
         # self.tot_del_gauss_stds = None
 
@@ -389,7 +397,11 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         # ====================
         #   evaluate
         # ====================
-        self.evaluate(**kwargs)  # <--- **kwargs not working then TODO !!!!
+        self.evaluator.evaluate(peak_wheel_pars=self.evaluator.default_peak_wheel_pars,
+                                smooth_wheel_pars=self.evaluator.default_smooth_wheel_pars,
+                                show=self.show,
+                                **kwargs)  # <--- **kwargs not working then TODO !!!!
+
         # ====================
         #   reward
         # ====================
@@ -400,6 +412,8 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         # ===========
         #  slope
         # ===========
+        self.avg_steepest_slope = self.evaluator.ana_results['slope']['avg']
+        assert self.avg_steepest_slope is not None
         slope_passed = 'X'
         if abs(self.avg_steepest_slope) < self.thresholds['steepest_slope']:  # self.ana.steepest_slope
             slope_dist = (self.thresholds['steepest_slope'] - abs(self.avg_steepest_slope))  # minus!!
@@ -414,6 +428,8 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         # ===============
         #  dynamic range
         # ===============
+        self.avg_dyn = self.evaluator.ana_results['dyn']['avg']
+        assert self.avg_dyn is not None
         dyn_passed = 'X'
         if self.avg_dyn < self.thresholds['dynamic_range']:  # self.ana.dynamic_range
             dyn_dist = self.thresholds['dynamic_range'] - self.avg_dyn
@@ -428,11 +444,9 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         # ===============
         #  n_peaks (no meaningful for BBP sweeps) --> NOTE it is!
         # ===============
+        self.avg_n_peaks = self.evaluator.ana_results['n_peaks']['avg']
+        assert self.avg_n_peaks is not None
         n_peak_passed = 'X'
-        # if len(self.ana.peaks) < self.thresholds['peaks']:
-        #     peaks_dist = self.thresholds['peaks'] - len(self.ana.peaks)
-        #     peaks_reward = abs(len(self.ana.peaks)) / self.thresholds['peaks'] - 1.
-        #     peaks_reward *= 10  # maybe try it?
         if self.avg_n_peaks < self.thresholds['peaks']:
             peaks_dist = self.thresholds['peaks'] - self.avg_n_peaks
             peaks_reward = abs(self.avg_n_peaks) / self.thresholds['peaks'] - 1.
@@ -446,6 +460,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         # ===============
         #  peak increasing fitting std
         # ===============
+        self.sum_peaks_inc_std = self.evaluator.ana_results['peaks_inc']['sum']
         peak_inc_fit_passed = 'X'
         if self.sum_peaks_inc_std > self.thresholds['sum_peaks_inc_std']:  # the opposite sign!
             del_pinc_stds_dist = self.sum_peaks_inc_std - self.thresholds['sum_peaks_inc_std']
@@ -456,23 +471,6 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
             del_pinc_stds_dist = 0.
             del_pinc_stds_reward = 10  # 50.
             peak_inc_fit_passed = 'O'
-
-        # ===============
-        #  gaussian fitting
-        #  need abs()?
-        #  -> Removed it as it is unstable and can make the trainng worse
-        # ===============
-        # if self.tot_del_gauss_stds > self.thresholds['tot_del_gauss_stds']:   # the opposite sign!
-        #     del_gauss_stds_dist = self.tot_del_gauss_stds - self.thresholds['tot_del_gauss_stds']
-        #     del_gauss_stds_reward = self.thresholds['tot_del_gauss_stds'] / self.tot_del_gauss_stds - 1.
-        #     del_gauss_stds_reward *= 10  # maybe try it?
-        # else:
-        #     # dyn_reward  = abs(self.ana.dynamic_range - self.thresholds['dynamic_range']) *2
-        #     del_gauss_stds_dist = 0.
-        #     del_gauss_stds_reward = 50.
-        # if self.show:
-        #     print(f" tot_del_gauss_stds : {self.tot_del_gauss_stds:.3f} vs. {self.thresholds['tot_del_gauss_stds']:.3f}. Distance: {del_gauss_stds_dist:.4f}, Extra Reward: {del_gauss_stds_reward:.4f}")
-        # extra_reward += del_gauss_stds_reward
 
         extra_reward += slope_reward
         extra_reward += dyn_reward
@@ -488,6 +486,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         noise_lvl_passed = []
         noise_lvl_passed_bool = []
         noise_lvl_reward = 0
+        self.noise_lvls = self.evaluator.ana_results['noise_level']['results']
         if 'noise_level' in self.thresholds:
             for noise_lvl in self.noise_lvls:
                 # for each line cut
@@ -513,6 +512,7 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         oow_n_peaks_passed = []
         oow_n_peaks_passed_bool = []
         oow_n_peaks_reward = 0
+        self.n_peaks = self.evaluator.ana_results['n_peaks']['results']
         for oow_n_peak in self.n_peaks:
             # for each line cut
             if oow_n_peak < self.thresholds['peaks']:
@@ -539,10 +539,6 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         """
 
         terminated = False
-        # if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and self.tot_del_gauss_stds <= self.thresholds['tot_del_gauss_stds'] and len(self.ana.peaks) >= self.thresholds['peaks'] and self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:  # added n_peaks!
-        # if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and \
-        #     len(self.ana.peaks) >= self.thresholds['peaks'] and \
-        #     self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:  # added n_peaks!
         if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and \
                 self.avg_dyn >= self.thresholds['dynamic_range'] and \
                 all(oow_n_peaks_passed_bool) and \
@@ -609,159 +605,6 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
             # print('End -------------------------------------------------------')
 
         return self._get_obs(), tot_reward, terminated, False, info
-
-    """
-    # ====================
-    #     Analyze
-    # ====================
-    """
-
-    def get_ana_values(self, ana=None):
-        if ana is None:
-            ana = self.ana
-        assert ana is not None
-        ana_attrs = [k[1:] for k in ana.__dict__.keys() if k.startswith('_')]
-        ana_results = {atr: ana.__dict__['_' + atr] for atr in ana_attrs if atr in self.thresholds.keys()}
-
-        self.ana_value_state = np.array(list(ana_results.values()))
-
-        return np.array(list(ana_results.values()))  # returns array
-
-    def evaluate(self, **kwargs):  # show not needed but fine   show=True,
-
-        dyns = []
-        # del_dyn = []
-        steepest_slopes = []
-        n_peaks = []
-
-        peaks = []
-        proms = []
-        # del_proms = []   # Fixme: do I need this?
-
-        peak_inc_std = []
-
-        noise_lvls = []
-        # del_steepest_slope = []
-        for data, data_x in zip(self.state, self.data_x):
-            # TODO: edit in the Ana1D file! there are too many places to change so for now I will just put it here
-            # FIXME: hardcoded!
-            # if self.ana_pars['smooth_pars'] is None:
-            smooth_window = 0.08  # 0.05   # 0.1 too smooth? # 0.08
-            smooth_pars = {'window_size': int(np.ceil(len(data) * smooth_window)),
-                           'filter_order': 2}
-
-            self.ana_pars['smooth_pars'] = smooth_pars
-
-            # if self.ana_pars['peak_pars'] is None:
-            window_ratio = 0.02  # 0.01
-
-            mean = np.mean(data)
-            std_dev = np.std(data)
-            prominence_guess = mean + 1.5 * std_dev  # 2 being too large? k=2 for moderate peaks
-            prominence_guess /= 8.5   #  5 was too high, 10 was too low, I will choose in between 7.5 too high
-
-            # print(f"{mean=}, {std_dev=}")
-            peak_pars = {'prominence': prominence_guess,
-                         'width': len(data) * window_ratio}  # width_guess -> this depends on charging E
-
-            self.ana_pars['peak_pars'] = peak_pars
-            # print(f"{self.ana_pars['smooth_pars']=}")
-
-            assert self.ana_pars['peak_pars'] is not None and self.ana_pars['smooth_pars'] is not None
-            data_ana1d = Ana1D(data=data,
-                               data_x=data_x,
-                               peak_pars=self.ana_pars['peak_pars'],
-                               smooth_pars=self.ana_pars['smooth_pars'],
-                               **kwargs)  # sweep_gate_name='any',
-
-            # _ = data_ana1d.gauss_fit(show=self.show, raw=False)  # Do not use raw
-            # avg_gauss_stds.append(data_ana1d.gauss_avg_std)
-            # del_gauss_stds.append(np.max(data_ana1d.gauss_stds) - np.min(data_ana1d.gauss_stds))
-
-            """ dyn: always the steepest slope's dyn """
-            # ========
-            # 0) dyn
-            # ========
-            data_ana1d.get_dynamic_range(show=self.show_ana, raw=False, **kwargs)
-            # if self.show_ana:
-            #     plt.show()
-            dyns.append(data_ana1d.dynamic_range)
-
-            # ==================
-            # 1) steepest slope
-            # ==================
-            data_ana1d.get_steepest_slope(show=self.show_ana, raw=False, **kwargs)
-            # if self.show_ana:
-            # plt.show()
-            steepest_slopes.append(data_ana1d.steepest_slope)
-
-            # =========
-            # 2) peaks
-            # =========
-            # ana_pars  TODO: hardcoded
-            # data_ana1d.peak_pars['prominence'] *= 10
-            # data_ana1d.peak_pars['width'] *= 1.5
-            # print(f'{data_ana1d.peak_pars=}')
-            # data_ana1d.get_peaks(show=self.show_ana, **kwargs)
-            # print(f'applying peak_pars={self.ana_pars["peak_pars"]}')
-            # data_ana1d.peak_pars = self.ana_pars['peak_pars']
-            # print(f'new peak_pars={data_ana1d.peak_pars=}')
-            data_ana1d.get_peaks(show=self.show_ana, peak_pars=self.ana_pars['peak_pars'])   # no need for this but double check
-            # if self.show_ana:
-            # plt.show()
-            peaks.append(data_ana1d.peaks)
-            proms.append(data_ana1d.prominences)
-            n_peaks.append(len(data_ana1d.peaks))
-            # del_proms.append(np.max(data_ana1d.prominences) - np.min(data_ana1d.prominences))
-
-            # =======================
-            # 3) peak increasing fit
-            # =======================
-            # TODO: where the peak trend implementation gone
-
-            data_ana1d.peaks_increasing_fit(show=self.show_ana, raw=False, normalize=True)  # this one gets normalized?
-            # if self.show_ana:
-            # plt.show()
-
-            if len(data_ana1d.peaks_increasing_std) == 0:  # it means perfectly fitted
-                if len(data_ana1d.peaks) <= self.thresholds['peaks']:  # usual reason
-                    res = [1e1]  # too large?
-                    peak_inc_std.append(res)
-                else:
-                    raise Exception(
-                        f"Unknown error with res={data_ana1d.peaks_increasing_std:.4f} and n_peaks={len(data_ana1d.peaks)}")
-            else:
-                peak_inc_std.append(data_ana1d.peaks_increasing_std)
-
-            # =======================
-            # 4) noise level
-            # =======================
-            # noise level checking
-            noise_lvl = np.mean(data)
-            noise_lvls.append(noise_lvl)
-
-        # assign before handing over
-        # data_ana1d.tot_gauss_std = tot_gauss_std
-        # data_ana1d.gauss_std = data_ana1d.gauss_stds
-        # print(f'avg: {np.mean(avg_gauss_stds)}')
-
-        # self.tot_del_gauss_stds = np.sum(del_gauss_stds)
-
-        self.avg_dyn = np.mean(dyns)
-        self.sum_dyn = np.sum(dyns)
-
-        self.avg_n_peaks = np.mean(n_peaks)
-        self.n_peaks = n_peaks
-
-        self.avg_steepest_slope = np.mean(steepest_slopes)
-        self.sum_steepest_slope = np.sum(steepest_slopes)
-
-        self.avg_peaks_inc_std = np.mean(peak_inc_std)
-        self.sum_peaks_inc_std = np.sum(peak_inc_std)
-
-        self.noise_lvls = noise_lvls
-
-        self.ana = data_ana1d  # at the end so that it stores all the results
 
     """
     # ====================
@@ -864,7 +707,5 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
 
         at_bounds_hard = self._set_gate_voltages(gate_name, self.current_gate_voltages[gate_name] + action)
         # strategy=self.at_bounds_strategy)  # hardcoded
-
-
 
 

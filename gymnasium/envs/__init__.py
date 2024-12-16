@@ -10,6 +10,7 @@ from gymnasium.envs.registration import (
     spec,
 )
 
+# ======== 1D ========
 register(
     id="Sensor1DEnvSimple-v0",
     entry_point="gymnasium.envs.classic_control.custom_env_1d_sensor_simple:Sensor1DEnvSimple",
@@ -45,14 +46,15 @@ register(
     max_episode_steps=500,
 )
 
+# ======== 2D ========
 register(
-    id="SensorEnv2DSimple-v0",
-    entry_point="gymnasium.envs.classic_control.custom_env_2d_sensor:SensorEnv2DSimple",
+    id="SensorEnv2DEval-v0",
+    entry_point="gymnasium.envs.classic_control.custom_env_2d_sensor_evaluator:SensorEnv2DEval",
     reward_threshold=1000.0,
     max_episode_steps=500,
 )
 
-
+# ======== extra ========
 register(
     id="PatternTrackingEnv-v0",
     entry_point="gymnasium.envs.classic_control.pattern_tracking:PatternTrackingEnv",
