@@ -126,7 +126,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         self.del_thresholds = del_thresholds
 
         if ana_pars is None:
-            ana_pars = {'peak_pars': None, 'smooth_pars': None}   # TODO: add more pars
+            ana_pars = {'peak_wheel_pars': None, 'smooth_wheel_pars': None}   # TODO: add more pars
         self.ana_pars = ana_pars
 
         # ==========
@@ -157,7 +157,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
         self.ana_raw = ana_raw
         self.data_x = None
-        self.dataxarr = None
+        self.dataitem = None
         # self.raw = raw
 
         # ===========
@@ -185,7 +185,19 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
         self.noise_lvls = None
 
+        self.has_coulombs = None
+        self.curr_statuses = None
+
         self.dist_passed_rewards = {}
+
+        # =======================
+        #  action, reward, state
+        # =======================
+        self.action = None
+        self.reward = 0.
+        self.ana_reward = 0.
+        self.termination_reward = 0.
+        self.reward_scale = None
 
         # ===========
         #  Check cuda
@@ -270,7 +282,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # state = self.normalize_obs(self.measurement.data.data.flatten())  # self.measurement.data.data.flatten()
         self.data_x = self.measurement.data[0].x.data  # the same shape: (3, resolution)
         # self.state = state
-        self.dataxarr = self.measurement.data[0]
+        self.dataitem = self.measurement.data[0]
 
         """ !!! The thing is simulation resolution and line cut resolution can be different """
         if len(self.state[0]) != self.resolution:
@@ -282,12 +294,11 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                 f"[warning] The init observation {state} is not within the observation space {self.observation_space}. We clip it.")
             state = np.clip(state, self.observation_space.low, self.observation_space.high)
 
+        # reset reward needed? maybe not
+
         return state, info
 
     def step(self, action, use_seed=False, **kwargs):  # debug True for now  stepsizes ---> give error
-        # print(action)
-        # print(len(action))
-        # print(type(action))
         if self.show_only_True:
             self.show = False
             self.show_ana = False
@@ -318,12 +329,11 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # print(action)
 
         if not self.action_space.contains(action):
-            # print(f"Action {action} is not within action space. We clip the action to {np.clip(action, self.action_space.low, self.action_space.high)}.")
-            # env_logger.warning(f"[warning] Action {action} is not within action space {self.action_space}. We clip the action.")
             action = np.clip(action, self.action_space.low, self.action_space.high)
         else:
             action = action
         # print(action)
+        self.action = action
 
         # ============================
         #   change gate voltages
@@ -334,41 +344,21 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
             # print("Current gate voltages:")
             self.get_current_gate_voltages(show=False, return_value=False)  # self.show
             curr_gate_voltages = self.get_current_gate_voltages(show=False, return_value=True)
-        # action = self._limit_gate_voltages(action, self.max_del_v)   # dv being a list of float
-        # print(valid_gates)
-        # print(action)
 
         for gate_i, (gate_name, dv) in enumerate(valid_gates.items()):
             action_i = action[gate_i]
-            # print(f"[info] Action {action_i:3f} V will be applied to {gate_name}")  # make it prettier
-            # if self.show:
-            #     print(f"[info] Action {gate_name}: {action_i:3f} V")  # make it prettier
-            # logger.info(f"[info] Action {action_i:3f} V will be applied to {gate_name}")
-
-            # at_bounds = self.change_gate_voltages(gate_name, action_i)
             self.change_gate_voltages(gate_name, action_i)
 
         if self.show:
-            # print("New gate voltages:")
-            # self.get_current_gate_voltages(show=self.show, return_value=False)
             new_gate_voltages = self.get_current_gate_voltages(show=False, return_value=True)
             row_list = []
             for (gn, c_gv), act_gv, n_gv in zip(curr_gate_voltages.items(), action, new_gate_voltages.values()):
                 row_list.append([gn, act_gv, c_gv, n_gv])
 
-            # print('\n')
             print(tabulate(row_list,
                            headers=['         action', '    current voltages', '   new voltages'],
                            floatfmt=(".5f", ".5f", ".5f", ".5f")
                            ))  # only header here
-            # ugly!
-            # c_str = 'current_gate_voltages'
-            # n_str = 'new_gate_voltages'
-            # action_str = 'action'
-            # print(f"{'': <20} {c_str: <20} {action_str: <15} {n_str: <20}\n")
-            # for (gn, c_gv), act_gv, n_gv in zip(curr_gate_voltages.items(), action, new_gate_voltages.values()):
-            #     print(f"{gn: <20} {c_gv: <20} {act_gv: <15} {n_gv: <20}")
-
         # ====================
         #   measure
         # ====================
@@ -380,7 +370,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         data_x = self.measurement.data[0].x.data  # the same shape: (3, resolution)
         self.state = state
         self.data_x = data_x
-        self.dataxarr = self.measurement.data[0]
+        self.dataitem = self.measurement.data[0]
 
         """ !!! The thing is simulation resolution and line cut resolution can be different """
         if len(self.state[0]) != self.resolution:
@@ -397,15 +387,19 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # ====================
         #   evaluate
         # ====================
-        self.evaluator.evaluate(peak_wheel_pars=self.evaluator.default_peak_wheel_pars,
-                                smooth_wheel_pars=self.evaluator.default_smooth_wheel_pars,
+        # print(f"{self.evaluator.ana_pars=}")
+        self.evaluator.evaluate(
+                                # data=self.dataitem,  # self.state,
+                                # data_x=self.data_x,
+                                peak_wheel_pars=self.ana_pars['peak_wheel_pars'],  #  self.evaluator.default_peak_wheel_pars,
+                                smooth_wheel_pars=self.ana_pars['smooth_wheel_pars'],   # self.evaluator.default_smooth_wheel_pars,
                                 show=self.show,
                                 **kwargs)  # <--- **kwargs not working then TODO !!!!
 
         # ====================
         #   reward
         # ====================
-
+        # reset extra reward
         extra_reward = 0.
 
         """ now change to average across 3 different sweeps """
@@ -441,25 +435,26 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
             dyn_reward = 10  # 50.
             dyn_passed = 'O'
 
-        # ===============
+        # ============================================================
         #  n_peaks (no meaningful for BBP sweeps) --> NOTE it is!
-        # ===============
+        # ============================================================
         self.avg_n_peaks = self.evaluator.ana_results['n_peaks']['avg']
         assert self.avg_n_peaks is not None
         n_peak_passed = 'X'
+        peaks_reward = 0.
         if self.avg_n_peaks < self.thresholds['peaks']:
             peaks_dist = self.thresholds['peaks'] - self.avg_n_peaks
-            peaks_reward = abs(self.avg_n_peaks) / self.thresholds['peaks'] - 1.
-            peaks_reward *= 10  # maybe try it?
+            # peaks_reward = abs(self.avg_n_peaks) / self.thresholds['peaks'] - 1.
+            # peaks_reward *= 10  # maybe try it?
         else:
             # dyn_reward  = abs(self.ana.dynamic_range - self.thresholds['dynamic_range']) *2
             peaks_dist = 0.
-            peaks_reward = 10  # 50.
+            # peaks_reward = 10  # 50.
             n_peak_passed = 'O'
 
-        # ===============
+        # ==============================
         #  peak increasing fitting std
-        # ===============
+        # ==============================
         self.sum_peaks_inc_std = self.evaluator.ana_results['peaks_inc']['sum']
         peak_inc_fit_passed = 'X'
         if self.sum_peaks_inc_std > self.thresholds['sum_peaks_inc_std']:  # the opposite sign!
@@ -472,16 +467,17 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
             del_pinc_stds_reward = 10  # 50.
             peak_inc_fit_passed = 'O'
 
-        extra_reward += slope_reward
-        extra_reward += dyn_reward
-        extra_reward += peaks_reward  # was missing?
-        extra_reward += del_pinc_stds_reward
+        # extra_reward += slope_reward
+        # extra_reward += dyn_reward
+        # extra_reward += peaks_reward  # was missing?
+        # extra_reward += del_pinc_stds_reward
+
 
         # =============================
         #   intermediate rewards:
         # =============================
         # ===============
-        #  out of window
+        #  noise level
         # ===============
         noise_lvl_passed = []
         noise_lvl_passed_bool = []
@@ -491,18 +487,15 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
             for noise_lvl in self.noise_lvls:
                 # for each line cut
                 if noise_lvl < self.thresholds['noise_level']:
-                    # extra_reward -= 50
-                    noise_lvl_reward -= 10
+                    noise_lvl_reward -= 50
                     noise_lvl_passed.append('X')
                     noise_lvl_passed_bool.append(False)
                 else:
-                    # extra_reward += 50
-                    # noise_lvl_reward += 50
                     noise_lvl_passed.append('O')
                     noise_lvl_passed_bool.append(True)
         else:
             print("[warning] No noise level defined. This is make the barrier calibration less robust.")
-        extra_reward += noise_lvl_reward
+        # extra_reward += noise_lvl_reward
 
         # TODO: does not really help for the out of range but maybe?
 
@@ -516,18 +509,50 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         for oow_n_peak in self.n_peaks:
             # for each line cut
             if oow_n_peak < self.thresholds['peaks']:
-                # extra_reward -= 50
-                oow_n_peaks_reward -= 50
+                oow_n_peaks_reward -= 25  # 50
                 oow_n_peaks_passed.append('X')
                 oow_n_peaks_passed_bool.append(False)
             else:
-                # extra_reward += 50
-                # noise_lvl_reward += 50
                 oow_n_peaks_passed.append('O')
                 oow_n_peaks_passed_bool.append(True)
 
+        # =============================
+        #   has_coulomb & curr status
+        # =============================
+        has_coulomb_passed = []
+        has_coulomb_passed_bool = []
+        has_coulomb_reward = 0
+        self.has_coulombs = self.evaluator.ana_results['has_coulomb']['results']  # a list of bools
+        for has_coulomb in self.has_coulombs:   # for each line cut
+            if not has_coulomb:
+                has_coulomb_reward -= 50  # 50
+                has_coulomb_passed.append('X')
+                has_coulomb_passed_bool.append(False)
+            else:
+                has_coulomb_passed.append('O')
+                has_coulomb_passed_bool.append(True)
+        has_coulomb_list = [hc for hc in self.has_coulombs]  # a list
+
+        # TODO: curr status as well? or is it overlapping with noise_level there
+        self.curr_statuses = self.evaluator.ana_results['curr_status']['results']  # a list of str
+        curr_status_list = [cs for cs in self.curr_statuses]  # a list
+
+
+        # -----------------------------
+        # add up all ana rewards
+        # -----------------------------
+        extra_reward += slope_reward
+        extra_reward += dyn_reward
+        # extra_reward += peaks_reward  # was missing?
+        extra_reward += del_pinc_stds_reward
+        extra_reward += noise_lvl_reward
         extra_reward += oow_n_peaks_reward
-        """
+        extra_reward += has_coulomb_reward
+
+        self.ana_reward = extra_reward
+
+        """ 
+        =============================================================================
             terminate condition:
                 above threshold
 
@@ -536,30 +561,45 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                           'peaks': 1,
                          }
             UPDATE: removed gauss fitting threshold
+        =============================================================================
         """
-
         terminated = False
         if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and \
                 self.avg_dyn >= self.thresholds['dynamic_range'] and \
                 all(oow_n_peaks_passed_bool) and \
                 self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:  # added n_peaks!
+                # TODO: add condition like sufficient current!
+
                 # self.avg_n_peaks >= self.thresholds['peaks'] and \
 
             terminated = True
 
         if terminated:
-            reward = 10  # 100.  # too much? ^^"
+            termination_reward = 10  # 100.  # too much? ^^"
         else:
-            reward = -10  # -100.  # How to scale this? T-T
+            termination_reward = -10  # -100.  # How to scale this? T-T
+        self.termination_reward = termination_reward
 
-        tot_reward_ = extra_reward + reward
-        tot_reward = tot_reward_ / 1e2  #  # 1e1  # 1e3  # scaling
+        tot_reward_ = extra_reward + termination_reward
+
+        reward_scale = 1e3
+        tot_reward = tot_reward_ / reward_scale  #  # 1e1  # 1e3  # scaling
+        self.reward = tot_reward
+        self.reward_scale = reward_scale
 
         dist_passed_rewards = {'slope': [slope_dist, slope_passed, slope_reward],
                                'dyn': [dyn_dist, dyn_passed, dyn_reward],
-                               'n_peaks': [peaks_dist, n_peak_passed, peaks_reward],
+                               'n_peaks': [peaks_dist, n_peak_passed, peaks_reward],    # note: neglected
                                'oof_n_peaks': [0, oow_n_peaks_passed_bool, oow_n_peaks_reward],
-                               'peak_increasing': [del_pinc_stds_dist, peak_inc_fit_passed, del_pinc_stds_reward]}
+                               'peak_increasing': [del_pinc_stds_dist, peak_inc_fit_passed, del_pinc_stds_reward],
+                               'noise_level': [0, noise_lvl_passed, noise_lvl_reward],
+
+                                # has_coulomb_passed : str  has_coulomb_list: bool
+                               'has_coulomb': [0, has_coulomb_passed, has_coulomb_reward],  # a list, exception # fixme: maybe not needed?
+                               'curr_status': [0, curr_status_list, 0.],
+
+                               # FIxme: shouldn't we put the dist to the target value for the ind n_peaks and noise level too?
+                               }
 
         self.dist_passed_rewards = dist_passed_rewards
 
@@ -576,7 +616,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                 ['N peaks', f'{self.avg_n_peaks}', f"{self.thresholds['peaks']:.3f}", f"{peaks_dist:.4f}",
                  n_peak_passed, f"{peaks_reward:.4f}"],
 
-                ['N peaks (indiv)', [f'{oow_p:.3e}' for oow_p in self.n_peaks], f"{self.thresholds['peaks']:.3f}", oow_n_peaks_passed_bool,
+                ['N peaks (indiv)', [f'{oow_p}' for oow_p in self.n_peaks], f"{self.thresholds['peaks']:.3f}", oow_n_peaks_passed_bool,
                  oow_n_peaks_passed, f"{oow_n_peaks_reward:.4f}"],
 
                 ['Peak increasing (sum. std)', f'{self.sum_peaks_inc_std:.3e}',
@@ -586,12 +626,27 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                 ## noise
                 ['Current level', [f'{nl:.3e}' for nl in self.noise_lvls], f"{self.thresholds['noise_level']:.3e}", noise_lvl_passed_bool,   # f'{nl:.3e}' for nl in self.noise_lvls
                  noise_lvl_passed, f"{noise_lvl_reward:.4f}"],
+
+                # coulomb
+                ['has_coulomb', self.has_coulombs, [True, True, True], self.has_coulombs, has_coulomb_passed, has_coulomb_reward],
+
+                ['', self.curr_statuses,"", "", "", ""],
+
+                ['coulomb info',
+                [r['coulomb_status']['info'] for r in self.evaluator.coulomb_status_ana['results']],
+                "",
+                "",
+                "", ""
+                ],
+
                 ['', '', '', '', '', ''],
                 ['[Reward]', '', '', '', '', ''],
-                ['Termination', '', '', '', '', f'{reward:.5f}'],
+                ['Termination', '', '', '', '', f'{termination_reward:.5f}'],
                 ['Extra (ana)', '', '', '', '', f'{extra_reward:.5f}'],
                 ['Total', '', '', '', '', f'{tot_reward_:.5f}'],
                 ['Scaled Total', '', '', '', '', f'{tot_reward:.5f}'],
+                ['', '', '', '', '', f''],
+                ['Terminated', '', '', '', '', f'{terminated}'],
             ],
                 # headers=['ana', 'actual', 'threshold', 'distance', 'passed', 'reward'],
                 headers=['ana', 'actual', 'threshold', 'ana pars', 'passed', 'reward'],
@@ -601,7 +656,8 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # tot_reward, terminated = 0., 0.  # ????????? what the hell loool
         if self.show:
             print(
-                f'========================================================================================================================== DONE: {terminated}')
+                f'============================================================================================='
+                f'=============================================================================================')
             # print('End -------------------------------------------------------')
 
         return self._get_obs(), tot_reward, terminated, False, info
@@ -613,8 +669,6 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
     """
 
     def _get_obs(self):  # --> returns state
-        # state = np.array(list(self.get_current_gate_voltages(show=False, return_value=True).values()) + list(self.ana_value_state) + [self.ana_state], dtype=np.float32)
-        # state = np.array(list(self.get_current_gate_voltages(show=False, return_value=True).values()) + list(self.ana_value_state), dtype=np.float32)
         state = self.state
         assert state.shape == (3, self.resolution)  # hardcoded
 

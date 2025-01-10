@@ -323,21 +323,11 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         """ order: always stick to device parameter - ground truth
         """
         if self.show:
-            # print("Current gate voltages:")
             self.get_current_gate_voltages(show=False, return_value=False)  # self.show
             curr_gate_voltages = self.get_current_gate_voltages(show=False, return_value=True)
-        # action = self._limit_gate_voltages(action, self.max_del_v)   # dv being a list of float
-        # print(valid_gates)
-        # print(action)
 
         for gate_i, (gate_name, dv) in enumerate(valid_gates.items()):
             action_i = action[gate_i]
-            # print(f"[info] Action {action_i:3f} V will be applied to {gate_name}")  # make it prettier
-            # if self.show:
-            #     print(f"[info] Action {gate_name}: {action_i:3f} V")  # make it prettier
-            # logger.info(f"[info] Action {action_i:3f} V will be applied to {gate_name}")
-
-            # at_bounds = self.change_gate_voltages(gate_name, action_i)
             self.change_gate_voltages(gate_name, action_i)
 
         if self.show:
@@ -353,13 +343,6 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
                            headers=['         action', '    current voltages', '   new voltages'],
                            floatfmt=(".5f", ".5f", ".5f", ".5f")
                            ))  # only header here
-            # ugly!
-            # c_str = 'current_gate_voltages'
-            # n_str = 'new_gate_voltages'
-            # action_str = 'action'
-            # print(f"{'': <20} {c_str: <20} {action_str: <15} {n_str: <20}\n")
-            # for (gn, c_gv), act_gv, n_gv in zip(curr_gate_voltages.items(), action, new_gate_voltages.values()):
-            #     print(f"{gn: <20} {c_gv: <20} {act_gv: <15} {n_gv: <20}")
 
         # ====================
         #   measure
@@ -568,8 +551,6 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
         self.dist_passed_rewards = dist_passed_rewards
 
         if self.show:
-            # print(f'----------------------------------------------------------')
-            # print(f'[Reward]')
             print(tabulate([
                 ['Steepest slope', f"{self.avg_steepest_slope:.3e}", f"{self.thresholds['steepest_slope']:.3e}",
                  f"{slope_dist:.4e}", slope_passed, f"{slope_reward:.4f}"],
