@@ -148,6 +148,8 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
         # data
         self.show_only_True = show_only_True
+
+        # TODO: this does not do anything
         if self.show_only_True:
             self.show = False
             self.show_ana = False
@@ -269,6 +271,16 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
             # print(f"[info] Reset action {self.init_gate_voltages[gate_name]:3f} V will be applied to {gate_name}")  # too wordy
             # print(f"[info] Reset {gate_name}: {self.init_gate_voltages[gate_name]:3f} V")
             dv.value(self.init_gate_voltages[gate_name] - 1e-5)  # can throw some errors
+        # self.get_current_gate_voltages(show=self.show, return_value=False)  # update
+
+
+        # TODO: remove this later --> manually setting barrier gates
+        if self.show:
+            print(f"Setting TBL={self.device_parameter['TBL'].bounds[0]:.3f}, BBL={self.device_parameter['BBL'].bounds[0]:.3f}.")
+        self.device_parameter['TBL'].value(self.device_parameter['TBL'].bounds[0])
+        self.device_parameter['BBL'].value(self.device_parameter['BBL'].bounds[0])
+        if self.show:
+            print("Resetting Done ================================================================================================")
         self.get_current_gate_voltages(show=self.show, return_value=False)  # update
 
         # Then measure
@@ -295,6 +307,14 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
             state = np.clip(state, self.observation_space.low, self.observation_space.high)
 
         # reset reward needed? maybe not
+
+        # # TODO: remove this later
+        # print(f"Setting TBL={self.device_parameter['TBL'].bounds[0]:.3f}, BBL={self.device_parameter['BBL'].bounds[0]:.3f}.")
+        # self.device_parameter['TBL'].value(self.device_parameter['TBL'].bounds[0])
+        # self.device_parameter['BBL'].value(self.device_parameter['BBL'].bounds[0])
+        # print("Resetting Done ================================================================================================")
+        #
+
 
         return state, info
 
@@ -360,42 +380,18 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                            floatfmt=(".5f", ".5f", ".5f", ".5f")
                            ))  # only header here
         # ====================
-        #   measure (no need as evaluator will call this function) --> duplicated!
-        # ====================
-        # self.measurement.measure(show=self.show)  # use_seed = False by default
-        #
-        # """ disabled the normalization as it has to take care of the physical value of steepest slope """
-        # # state = self._normalize_obs(self.measurement.data.data)  # has additional dim, final shape : (3, resolution)
-        # state = self.measurement.data[0].data
-        # data_x = self.measurement.data[0].x.data  # the same shape: (3, resolution)
-        # self.state = state
-        # self.data_x = data_x
-        # self.dataitem = self.measurement.data[0]
-        #
-        # """ !!! The thing is simulation resolution and line cut resolution can be different """
-        # if len(self.state[0]) != self.resolution:
-        #     state = np.array([down_sample_1d(tm_s, self.resolution) for tm_s in state])
-        #     data_x = np.array([down_sample_1d(tm_x, self.resolution) for tm_x in data_x])
-        #     self.state = state
-        #     self.data_x = data_x
-        #
-        # if not self.observation_space.contains(state):
-        #     print(
-        #         f"[warning] The init observation {state} is not within the observation space {self.observation_space}. We clip it.")
-        #     state = np.clip(state, self.observation_space.low, self.observation_space.high)
-
-        # ====================
         #   evaluate
         # ====================
         # print(f"{self.evaluator.ana_pars=}")
         # print("How many times is it called?")    # the simulator might show two times of show_verbose as it sets pars prior to measurement
+        # print(f"{self.show=}, {self.show_ana=}")
         self.evaluator.evaluate(
                                 # data=self.dataitem,  # self.state,
                                 # data_x=self.data_x,
                                 peak_wheel_pars=self.ana_pars['peak_wheel_pars'],  #  self.evaluator.default_peak_wheel_pars,
                                 smooth_wheel_pars=self.ana_pars['smooth_wheel_pars'],   # self.evaluator.default_smooth_wheel_pars,
-                                show=self.show,
-                                auto_plot=self.show,
+                                show=self.show_ana,
+                                auto_plot=self.show_ana,
                                 **kwargs)  # <--- **kwargs not working then TODO !!!!
 
         # ====================
@@ -563,12 +559,14 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # -----------------------------
         # add up all ana rewards
         # -----------------------------
-        extra_reward += slope_reward
-        extra_reward += dyn_reward
+
         # extra_reward += peaks_reward  # was missing? --> not included
-        extra_reward += del_pinc_stds_reward
-        extra_reward += noise_lvl_reward
-        extra_reward += oow_n_peaks_reward
+
+        # extra_reward += slope_reward
+        # extra_reward += dyn_reward
+        # extra_reward += del_pinc_stds_reward
+        # extra_reward += noise_lvl_reward
+        # extra_reward += oow_n_peaks_reward
         extra_reward += has_coulomb_reward
 
         self.ana_reward = extra_reward
@@ -596,16 +594,26 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         =============================================================================
         """
         terminated = False
-        if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and \
-                self.avg_dyn >= self.thresholds['dynamic_range'] and \
-                all(oow_n_peaks_passed_bool) and \
-                all(self.has_coulombs) and \
-                self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:  # added n_peaks!
+        # if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and \
+        #         self.avg_dyn >= self.thresholds['dynamic_range'] and \
+        #         all(oow_n_peaks_passed_bool) and \
+        #         self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:  # added n_peaks!
+        """ HERE it has terminate conditions --------------------------------------------------------------------- """
+        if all(self.has_coulombs):
+
                 # TODO: add condition like sufficient current!
 
                 # self.avg_n_peaks >= self.thresholds['peaks'] and \
 
             terminated = True
+            if self.show_only_True:
+                self.evaluator.evaluate(
+                                        peak_wheel_pars=self.ana_pars['peak_wheel_pars'],  #  self.evaluator.default_peak_wheel_pars,
+                                        smooth_wheel_pars=self.ana_pars['smooth_wheel_pars'],   # self.evaluator.default_smooth_wheel_pars,
+                                        show=True,
+                                        auto_plot=True,
+                                        **kwargs)  # <--- **kwargs not working then TODO !!!!
+
 
         if terminated:
             termination_reward = 10  # 100.  # too much? ^^"
@@ -623,9 +631,9 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         dist_passed_rewards = {'slope': [slope_dist, slope_passed, slope_reward],
                                'dyn': [dyn_dist, dyn_passed, dyn_reward],
                                'n_peaks': [peaks_dist, n_peak_passed, peaks_reward],    # note: neglected
-                               'oof_n_peaks': [0, oow_n_peaks_passed_bool, oow_n_peaks_reward],
+                               'oof_n_peaks': [oow_n_peaks_passed, oow_n_peaks_passed_bool, oow_n_peaks_reward],  # [0, oow_n_peaks_passed_bool, oow_n_peaks_reward],
                                'peak_increasing': [del_pinc_stds_dist, peak_inc_fit_passed, del_pinc_stds_reward],
-                               'noise_level': [0, noise_lvl_passed, noise_lvl_reward],
+                               'noise_level': [noise_lvl_passed_bool, noise_lvl_passed, noise_lvl_reward],  # [0, noise_lvl_passed, noise_lvl_reward],
 
                                 # has_coulomb_passed : str  has_coulomb_list: bool
                                'has_coulomb': [0, has_coulomb_passed, has_coulomb_reward],  # a list, exception # fixme: maybe not needed?
@@ -637,115 +645,125 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         self.dist_passed_rewards = dist_passed_rewards
 
         if self.show:
-            # print(f'----------------------------------------------------------')
-            # print(f'[Reward]')
-
-            # peak pars
-            print(tabulate([
-                [i, f"{self.evaluator.peak_pars_all[f'data_{i}']['prominence']:.3e}",
-                    f"{self.evaluator.peak_pars_all[f'data_{i}']['width']:.3f}",
-                    f"{self.evaluator.peak_wheel_pars['window_ratio']:.3f}",
-                    f"{self.evaluator.peak_wheel_pars['n_sigma']:.3f}",
-                    f"{self.evaluator.peak_wheel_pars['prom_amp']:.3f}",
-                ] for i in range(3)
-            ],
-                headers=['Peak pars', 'prominence', 'width', 'window ratio (wheel)', 'n sigma (wheel)', 'prom amp (wheel)'],
-                tablefmt='orgtbl'))  # only header here
-
-            # coulomb peak pars
-            print(tabulate([
-                [i, f"{self.evaluator.coulomb_status_ana['results'][i]['ana_status']['peak_pars']['prominence']:.3e}",
-                    f"{self.evaluator.coulomb_status_ana['results'][i]['ana_status']['peak_pars']['width']:.3e}",
-                    f"{self.evaluator.coulomb_status_ana['results'][i]['coulomb_conditions']['peak_wheel_pars']['window_ratio']:.3e}",
-                    f"{self.evaluator.coulomb_status_ana['results'][i]['coulomb_conditions']['peak_wheel_pars']['n_sigma']:.3e}",
-                    f"{self.evaluator.coulomb_status_ana['results'][i]['coulomb_conditions']['peak_wheel_pars']['prom_amp']:.3e}",
-                ] for i in range(3)
-            ],
-                # headers=['ana', 'actual', 'threshold', 'distance', 'passed', 'reward'],
-                headers=['Peak pars', 'prominence', 'width', 'window ratio (wheel)', 'n sigma (wheel)', 'prom amp (wheel)'],
-                tablefmt='orgtbl'))  # only header here
-
-            # smooth pars should be the same for all data
-            print(tabulate([
-                [0, f"{self.evaluator.smooth_pars_all['data_0']['window_size']:.3f}",
-                    f"{self.evaluator.smooth_pars_all['data_0']['filter_order']:.3f}",
-                    f"{self.evaluator.smooth_wheel_pars['window_ratio']:.3f}",
-                    f"{self.evaluator.smooth_wheel_pars['filter_order']:.3f}",
-                 ],
-            ],
-                # headers=['ana', 'actual', 'threshold', 'distance', 'passed', 'reward'],
-                headers=['Smooth pars', 'window size', 'filter order', 'window ratio (wheel)', 'filter order (wheel)'],
-                tablefmt='orgtbl'))  # only header here
-
-            print(tabulate([
-                # coulomb pars
-                [0, f"{self.evaluator.coulomb_conditions['steepest_slope']:.3e}",
-                    f"{self.evaluator.coulomb_conditions['n_peaks']}",
-                    [f'{nl:.3e}' for nl in self.evaluator.coulomb_conditions['avg_curr_level']],
-                    f"{self.evaluator.coulomb_conditions['gauss_fit_std']:.3f}",
-                 ]
-            ],
-                # headers=['ana', 'actual', 'threshold', 'distance', 'passed', 'reward'],
-                headers=['coulomb pars'] + [' '.join(cc.split('_')) for cc in self.evaluator.coulomb_conditions.keys()][:-2],
-                tablefmt='orgtbl'))  # only header here
-
-            info = {}
-
-            print(tabulate([
-                ['Steepest slope', f"{self.avg_steepest_slope:.3e}", f"{self.thresholds['steepest_slope']:.3e}",
-                 f"{slope_dist:.4e}", slope_passed, f"{slope_reward:.4f}"],
-
-                ['Dynamic range', f'{self.avg_dyn:.4f}', f"{self.thresholds['dynamic_range']:.4f}", f"{dyn_dist:.4f}",
-                 dyn_passed, f"{dyn_reward:.4f}"],
-
-                # ['N peaks', f'{self.avg_n_peaks}', f"{self.thresholds['peaks']:.3f}", f"{peaks_dist:.4f}",
-                #  n_peak_passed, f"{peaks_reward:.4f}"],
-
-                ['N peaks (indiv)', [f'{oow_p}' for oow_p in self.n_peaks], f"{self.thresholds['peaks']:.3f}", oow_n_peaks_passed_bool,
-                 oow_n_peaks_passed, f"{oow_n_peaks_reward:.4f}"],
-
-                ['Peak increasing (sum. std)', f"{[f'{pic:.3e}' for pic in self.evaluator.ana_results['peaks_inc']['results']]} | sum = {self.sum_peaks_inc_std:.3e}",
-                 f"{self.thresholds['sum_peaks_inc_std']:.3e}", f"{del_pinc_stds_dist:.4f}", peak_inc_fit_passed,
-                 f"{del_pinc_stds_reward:.4f}"],
-
-                ## noise
-                ['Current level', [f'{nl:.3e}' for nl in self.noise_lvls], f"{self.thresholds['noise_level']:.3e}", noise_lvl_passed_bool,   # f'{nl:.3e}' for nl in self.noise_lvls
-                 noise_lvl_passed, f"{noise_lvl_reward:.4f}"],
-
-                # coulomb
-                ['has_coulomb', self.has_coulombs, [True, True, True], self.has_coulombs, has_coulomb_passed, has_coulomb_reward],
-
-                ['', self.curr_statuses,"", "", "", ""],
-
-                ['coulomb info',
-                [r['coulomb_status']['info'] for r in self.evaluator.coulomb_status_ana['results']],
-                "",
-                "",
-                "", ""
-                ],
-
-                ['', '', '', '', '', ''],
-                ['[Reward]', '', '', '', '', ''],
-                ['Termination', '', '', '', '', f'{termination_reward:.5f}'],
-                ['Extra (ana)', '', '', '', '', f'{extra_reward:.5f}'],
-                ['Total', '', '', '', '', f'{tot_reward_:.5f}'],
-                ['Scaled Total', '', '', '', '', f'{tot_reward:.5f}'],
-                ['', '', '', '', '', f''],
-                ['Terminated', '', '', '', '', f'{terminated}'],
-            ],
-                # headers=['ana', 'actual', 'threshold', 'distance', 'passed', 'reward'],
-                headers=['ana', 'actual', 'threshold', 'distance', 'passed', 'reward'],
-                tablefmt='orgtbl'))  # only header here
-
-        info = {}
-        # tot_reward, terminated = 0., 0.  # ????????? what the hell loool
-        if self.show:
+            self.print_tables(termination_reward=termination_reward, extra_reward=extra_reward,
+                              tot_reward=tot_reward, tot_reward_=tot_reward_, terminated=terminated)
             print(
                 f'============================================================================================='
                 f'=============================================================================================')
-            # print('End -------------------------------------------------------')
+        else:
+            if self.show_only_True and terminated:
+                self.print_tables(termination_reward=termination_reward, extra_reward=extra_reward,
+                                  tot_reward=tot_reward, tot_reward_=tot_reward_, terminated=terminated)
+                print(
+                    f'============================================================================================='
+                    f'=============================================================================================')
+        info = {}
 
         return self._get_obs(), tot_reward, terminated, False, info
+
+    """
+    # ====================
+    #     tables
+    # ====================
+    """
+    def print_tables(self, termination_reward, extra_reward, tot_reward, tot_reward_, terminated):
+
+        # peak pars
+        print(tabulate([
+            [i, f"{self.evaluator.peak_pars_all[f'data_{i}']['prominence']:.3e}",
+             f"{self.evaluator.peak_pars_all[f'data_{i}']['width']:.3f}",
+             f"{self.evaluator.peak_wheel_pars['window_ratio']:.3f}",
+             f"{self.evaluator.peak_wheel_pars['n_sigma']:.3f}",
+             f"{self.evaluator.peak_wheel_pars['prom_amp']:.3f}",
+             ] for i in range(3)
+        ],
+            headers=['Peak pars', 'prominence', 'width', 'window ratio (wheel)', 'n sigma (wheel)', 'prom amp (wheel)'],
+            tablefmt='orgtbl'))  # only header here
+
+        # coulomb peak pars
+        print(tabulate([
+            [i, f"{self.evaluator.coulomb_status_ana['results'][i]['ana_status']['peak_pars']['prominence']:.3e}",
+             f"{self.evaluator.coulomb_status_ana['results'][i]['ana_status']['peak_pars']['width']:.3e}",
+             f"{self.evaluator.coulomb_status_ana['results'][i]['coulomb_conditions']['peak_wheel_pars']['window_ratio']:.3e}",
+             f"{self.evaluator.coulomb_status_ana['results'][i]['coulomb_conditions']['peak_wheel_pars']['n_sigma']:.3e}",
+             f"{self.evaluator.coulomb_status_ana['results'][i]['coulomb_conditions']['peak_wheel_pars']['prom_amp']:.3e}",
+             ] for i in range(3)
+        ],
+            # headers=['ana', 'actual', 'threshold', 'distance', 'passed', 'reward'],
+            headers=['Peak pars', 'prominence', 'width', 'window ratio (wheel)', 'n sigma (wheel)', 'prom amp (wheel)'],
+            tablefmt='orgtbl'))  # only header here
+
+        # smooth pars should be the same for all data
+        print(tabulate([
+            [0, f"{self.evaluator.smooth_pars_all['data_0']['window_size']:.3f}",
+             f"{self.evaluator.smooth_pars_all['data_0']['filter_order']:.3f}",
+             f"{self.evaluator.smooth_wheel_pars['window_ratio']:.3f}",
+             f"{self.evaluator.smooth_wheel_pars['filter_order']:.3f}",
+             ],
+        ],
+            # headers=['ana', 'actual', 'threshold', 'distance', 'passed', 'reward'],
+            headers=['Smooth pars', 'window size', 'filter order', 'window ratio (wheel)', 'filter order (wheel)'],
+            tablefmt='orgtbl'))  # only header here
+
+        print(tabulate([
+            # coulomb pars
+            [0, f"{self.evaluator.coulomb_conditions['steepest_slope']:.3e}",
+             f"{self.evaluator.coulomb_conditions['n_peaks']}",
+             [f'{nl:.3e}' for nl in self.evaluator.coulomb_conditions['avg_curr_level']],
+             f"{self.evaluator.coulomb_conditions['gauss_fit_std']:.3f}",
+             ]
+        ],
+            # headers=['ana', 'actual', 'threshold', 'distance', 'passed', 'reward'],
+            headers=['coulomb pars'] + [' '.join(cc.split('_')) for cc in self.evaluator.coulomb_conditions.keys()][
+                                       :-2],
+            tablefmt='orgtbl'))  # only header here
+
+        print(tabulate([
+            ['Steepest slope', f"{self.avg_steepest_slope:.3e}", f"{self.thresholds['steepest_slope']:.3e}",
+             f"{self.dist_passed_rewards['slope'][0]:.4e}", self.dist_passed_rewards['slope'][1], f"{self.dist_passed_rewards['slope'][2]:.4f}"],
+
+            ['Dynamic range', f'{self.avg_dyn:.4f}', f"{self.thresholds['dynamic_range']:.4f}",
+             f"{self.dist_passed_rewards['dyn'][0]:.4f}", self.dist_passed_rewards['dyn'][1], f"{self.dist_passed_rewards['dyn'][2]:.4f}"],
+
+            ['N peaks (indiv)', [f'{oow_p}' for oow_p in self.n_peaks], f"{self.thresholds['peaks']:.3f}",
+             # oow_n_peaks_passed_bool, oow_n_peaks_passed, f"{oow_n_peaks_reward:.4f}"], # NOTE: different order passed: str, passed_bool: bool
+             f"{self.dist_passed_rewards['oof_n_peaks'][1]}", f"{self.dist_passed_rewards['oof_n_peaks'][0]}", f"{self.dist_passed_rewards['dyn'][2]:.4f}"],
+
+            ['Peak increasing (sum. std)',
+             f"{[f'{pic:.3e}' for pic in self.evaluator.ana_results['peaks_inc']['results']]} | sum = {self.sum_peaks_inc_std:.3e}", f"{self.thresholds['sum_peaks_inc_std']:.3e}",
+            f"{self.dist_passed_rewards['peak_increasing'][0]:.3e}", self.dist_passed_rewards['peak_increasing'][1], f"{self.dist_passed_rewards['peak_increasing'][2]:.4f}"],
+
+            ## noise
+            ['Current level', [f'{nl:.3e}' for nl in self.noise_lvls], f"{self.thresholds['noise_level']:.3e}",
+             # noise_lvl_passed_bool, noise_lvl_passed, f"{noise_lvl_reward:.4f}"],
+            f"{self.dist_passed_rewards['noise_level'][0]}", f"{self.dist_passed_rewards['noise_level'][1]}", f"{self.dist_passed_rewards['noise_level'][2]:.4f}"],
+
+            # coulomb
+            ['has_coulomb', self.has_coulombs, [True, True, True], self.has_coulombs,
+             # has_coulomb_passed, has_coulomb_reward],
+             f"{self.dist_passed_rewards['has_coulomb'][1]}", f"{self.dist_passed_rewards['has_coulomb'][2]:.4f}"],
+
+            ['', self.curr_statuses, "", "", "", ""],
+
+            ['coulomb info',
+             [r['coulomb_status']['info'] for r in self.evaluator.coulomb_status_ana['results']],
+             "",
+             "",
+             "", ""
+             ],
+
+            ['', '', '', '', '', ''],
+            ['[Reward]', '', '', '', '', ''],
+            ['Termination', '', '', '', '', f'{termination_reward:.5f}'],
+            ['Extra (ana)', '', '', '', '', f'{extra_reward:.5f}'],
+            ['Total', '', '', '', '', f'{tot_reward_:.5f}'],
+            ['Scaled Total', '', '', '', '', f'{tot_reward:.5f}'],
+            ['', '', '', '', '', f''],
+            ['Terminated', '', '', '', '', f'{terminated}'],
+        ],
+            # headers=['ana', 'actual', 'threshold', 'distance', 'passed', 'reward'],
+            headers=['ana', 'actual', 'threshold', 'distance', 'passed', 'reward'],
+            tablefmt='orgtbl'))  # only header here
 
     """
     # ====================
