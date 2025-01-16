@@ -152,7 +152,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # TODO: this does not do anything
         if self.show_only_True:
             self.show = False
-            self.show_ana = False
+            self.show_ana = show_ana   # False
         else:
             self.show = show
             self.show_ana = show_ana
@@ -263,7 +263,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
         if self.show_only_True:
             self.show = False
-            self.show_ana = False
+            # self.show_ana = False
 
         # SEt init gate
         if self.show:
@@ -614,6 +614,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
             terminated = True
             if self.show_only_True:
+                # print(f"{self.show_ana=}")
                 self.evaluator.evaluate(
                                         peak_wheel_pars=self.ana_pars['peak_wheel_pars'],  #  self.evaluator.default_peak_wheel_pars,
                                         smooth_wheel_pars=self.ana_pars['smooth_wheel_pars'],   # self.evaluator.default_smooth_wheel_pars,
@@ -750,7 +751,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
              # has_coulomb_passed, has_coulomb_reward],
              f"{self.dist_passed_rewards['has_coulomb'][1]}", f"{self.dist_passed_rewards['has_coulomb'][2]:.4f}"],
 
-            ['', self.curr_statuses, "", "", "", ""],
+            ['current status', self.curr_statuses, "", "", "", ""],
 
             ['coulomb info',
              [r['coulomb_status']['info'] for r in self.evaluator.coulomb_status_ana['results']],
