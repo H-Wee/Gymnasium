@@ -204,6 +204,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # ===========
         #  Check cuda
         # ===========
+        # FIXME: putting here does not really help --> why it does not use gpu?
         if torch.cuda.is_available():
             device = torch.device('cuda')
             print("Using GPU:", torch.cuda.get_device_name(0))
@@ -319,9 +320,15 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         return state, info
 
     def step(self, action, use_seed=False, **kwargs):  # debug True for now  stepsizes ---> give error
-        if self.show_only_True:
-            self.show = False
-            self.show_ana = False
+        if self.show_only_True:  # turn off temporarily
+            show = False
+            show_ana = False
+        else:
+            show = self.show
+            show_ana = self.show_ana
+
+        #     self.show = False
+        #     self.show_ana = False
 
         self.step_count += 1
         # ============================
@@ -360,7 +367,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # ============================
         """ order: always stick to device parameter - ground truth
         """
-        if self.show:
+        if show:   # self.show:
             # print("Current gate voltages:")
             self.get_current_gate_voltages(show=False, return_value=False)  # self.show
             curr_gate_voltages = self.get_current_gate_voltages(show=False, return_value=True)
@@ -369,7 +376,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
             action_i = action[gate_i]
             self.change_gate_voltages(gate_name, action_i)
 
-        if self.show:
+        if show:  # self.show:
             new_gate_voltages = self.get_current_gate_voltages(show=False, return_value=True)
             row_list = []
             for (gn, c_gv), act_gv, n_gv in zip(curr_gate_voltages.items(), action, new_gate_voltages.values()):
@@ -390,8 +397,8 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                                 # data_x=self.data_x,
                                 peak_wheel_pars=self.ana_pars['peak_wheel_pars'],  #  self.evaluator.default_peak_wheel_pars,
                                 smooth_wheel_pars=self.ana_pars['smooth_wheel_pars'],   # self.evaluator.default_smooth_wheel_pars,
-                                show=self.show_ana,
-                                auto_plot=self.show_ana,
+                                show=show_ana,   # self.show_ana,
+                                auto_plot=show_ana,   # self.show_ana,
                                 **kwargs)  # <--- **kwargs not working then TODO !!!!
 
         # ====================
@@ -610,8 +617,8 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                 self.evaluator.evaluate(
                                         peak_wheel_pars=self.ana_pars['peak_wheel_pars'],  #  self.evaluator.default_peak_wheel_pars,
                                         smooth_wheel_pars=self.ana_pars['smooth_wheel_pars'],   # self.evaluator.default_smooth_wheel_pars,
-                                        show=True,
-                                        auto_plot=True,
+                                        show=self.show_ana,   # True, make it possible to see only measurement
+                                        auto_plot=True,  # self.show_ana, #  True,  <--- always show measurement
                                         **kwargs)  # <--- **kwargs not working then TODO !!!!
 
 
@@ -644,7 +651,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
         self.dist_passed_rewards = dist_passed_rewards
 
-        if self.show:
+        if show:   # self.show:
             self.print_tables(termination_reward=termination_reward, extra_reward=extra_reward,
                               tot_reward=tot_reward, tot_reward_=tot_reward_, terminated=terminated)
             print(
