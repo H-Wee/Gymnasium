@@ -573,7 +573,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # extra_reward += dyn_reward
         # extra_reward += del_pinc_stds_reward
         # extra_reward += noise_lvl_reward
-        # extra_reward += oow_n_peaks_reward
+        extra_reward += oow_n_peaks_reward
         extra_reward += has_coulomb_reward
 
         self.ana_reward = extra_reward
