@@ -276,11 +276,13 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
 
         # TODO: remove this later --> manually setting barrier gates
+        random_b1 = np.random.uniform(*self.device_parameter['TBL'].bounds)
+        random_b2 = np.random.uniform(*self.device_parameter['BBL'].bounds)
+        self.device_parameter['TBL'].value(random_b1)   # self.device_parameter['TBL'].bounds[0]
+        self.device_parameter['BBL'].value(random_b2)  # self.device_parameter['BBL'].bounds[0])
         if self.show:
-            print(f"Setting TBL={self.device_parameter['TBL'].bounds[0]:.3f}, BBL={self.device_parameter['BBL'].bounds[0]:.3f}.")
-        self.device_parameter['TBL'].value(self.device_parameter['TBL'].bounds[0])
-        self.device_parameter['BBL'].value(self.device_parameter['BBL'].bounds[0])
-        if self.show:
+            print(
+                    f"Setting TBL={random_b1:.3f}, BBL={random_b2:.3f}.")
             print("Resetting Done ================================================================================================")
         self.get_current_gate_voltages(show=self.show, return_value=False)  # update
 
@@ -534,7 +536,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         for oow_n_peak in self.n_peaks:
             # for each line cut
             if oow_n_peak < self.thresholds['peaks']:
-                oow_n_peaks_reward -= 25  # 50
+                oow_n_peaks_reward -= 25   # 25  # 50
                 oow_n_peaks_passed.append('X')
                 oow_n_peaks_passed_bool.append(False)
             else:
@@ -606,7 +608,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         #         all(oow_n_peaks_passed_bool) and \
         #         self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:  # added n_peaks!
         """ HERE it has terminate conditions --------------------------------------------------------------------- """
-        if all(self.has_coulombs):
+        if all(self.has_coulombs):   # all(oow_n_peaks_passed_bool):
 
                 # TODO: add condition like sufficient current!
 
