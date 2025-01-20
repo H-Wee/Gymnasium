@@ -83,6 +83,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                  # raw: bool = True,  # use bool by default
                  # physical_units : bool = False,
                  show_only_True: bool = False,
+                 # random_reset: bool = False,   # not needed, remove it later
                  # save_path: str = os.getcwd(),
                  **kwargs,
                  ):
@@ -156,6 +157,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         else:
             self.show = show
             self.show_ana = show_ana
+        # self.random_reset = random_reset   # it is already in simulator
 
         self.ana_raw = ana_raw
         self.data_x = None
@@ -276,15 +278,15 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
 
         # TODO: remove this later --> manually setting barrier gates
-        random_b1 = np.random.uniform(*self.device_parameter['TBL'].bounds)
-        random_b2 = np.random.uniform(*self.device_parameter['BBL'].bounds)
-        self.device_parameter['TBL'].value(random_b1)   # self.device_parameter['TBL'].bounds[0]
-        self.device_parameter['BBL'].value(random_b2)  # self.device_parameter['BBL'].bounds[0])
-        if self.show:
-            print(
-                    f"Setting TBL={random_b1:.3f}, BBL={random_b2:.3f}.")
-            print("Resetting Done ================================================================================================")
-        self.get_current_gate_voltages(show=self.show, return_value=False)  # update
+        # random_b1 = np.random.uniform(*self.device_parameter['TBL'].bounds)
+        # random_b2 = np.random.uniform(*self.device_parameter['BBL'].bounds)
+        # self.device_parameter['TBL'].value(random_b1)   # self.device_parameter['TBL'].bounds[0]
+        # self.device_parameter['BBL'].value(random_b2)  # self.device_parameter['BBL'].bounds[0])
+        # if self.show:
+        #     print(
+        #             f"Setting TBL={random_b1:.3f}, BBL={random_b2:.3f}.")
+        #     print("Resetting Done ================================================================================================")
+        # self.get_current_gate_voltages(show=self.show, return_value=False)  # update
 
         # Then measure
         self.measurement.measure(show=self.show)  # use_seed = False by default
@@ -399,8 +401,8 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                                 # data_x=self.data_x,
                                 peak_wheel_pars=self.ana_pars['peak_wheel_pars'],  #  self.evaluator.default_peak_wheel_pars,
                                 smooth_wheel_pars=self.ana_pars['smooth_wheel_pars'],   # self.evaluator.default_smooth_wheel_pars,
-                                show=show_ana,   # self.show_ana,
-                                auto_plot=show_ana,   # self.show_ana,
+                                show=show_ana,  # make it possible to see ana
+                                auto_plot=show,  # self.show_ana, #  True,  <--- always show measurement
                                 **kwargs)  # <--- **kwargs not working then TODO !!!!
 
         # ====================
@@ -571,12 +573,14 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
         # extra_reward += peaks_reward  # was missing? --> not included
 
-        # extra_reward += slope_reward
-        # extra_reward += dyn_reward
-        # extra_reward += del_pinc_stds_reward
+        extra_reward += slope_reward
+        extra_reward += dyn_reward
+        extra_reward += del_pinc_stds_reward
+
+        # barrier calibration reward
         # extra_reward += noise_lvl_reward
-        extra_reward += oow_n_peaks_reward
-        extra_reward += has_coulomb_reward
+        # extra_reward += oow_n_peaks_reward
+        # extra_reward += has_coulomb_reward
 
         self.ana_reward = extra_reward
 
@@ -603,12 +607,14 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         =============================================================================
         """
         terminated = False
-        # if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and \
-        #         self.avg_dyn >= self.thresholds['dynamic_range'] and \
+
         #         all(oow_n_peaks_passed_bool) and \
         #         self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:  # added n_peaks!
         """ HERE it has terminate conditions --------------------------------------------------------------------- """
-        if all(self.has_coulombs):   # all(oow_n_peaks_passed_bool):
+        # if all(self.has_coulombs):   # all(oow_n_peaks_passed_bool):
+        if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and \
+                self.avg_dyn >= self.thresholds['dynamic_range'] and \
+                self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:
 
                 # TODO: add condition like sufficient current!
 
