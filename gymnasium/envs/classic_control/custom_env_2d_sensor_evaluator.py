@@ -289,11 +289,10 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # self.get_current_gate_voltages(show=self.show, return_value=False)  # update
 
         # Then measure
-        self.measurement.measure(show=self.show)  # use_seed = False by default
+        self.measurement.measure(show=self.show, random_init=False)  # use_seed = False by default
         """ disabled the normalization as it has to take care of the physical value of steepest slope """
         # state = self._normalize_obs(self.measurement.data.data)  # has additional dim, final shape : (3, resolution)
 
-        # print('IS it here?????????')
         state = self.measurement.data[0].data  # returns a tuple of 1D [0] and 2D [1]
         self.state = state
         # state = self.normalize_obs(self.measurement.data.data.flatten())  # self.measurement.data.data.flatten()
