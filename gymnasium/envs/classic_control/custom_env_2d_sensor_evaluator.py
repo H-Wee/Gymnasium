@@ -83,7 +83,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                  # raw: bool = True,  # use bool by default
                  # physical_units : bool = False,
                  show_only_True: bool = False,
-                 # random_reset: bool = False,   # not needed, remove it later
+                 random_init: bool = False,
                  # save_path: str = os.getcwd(),
                  **kwargs,
                  ):
@@ -149,6 +149,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
         # data
         self.show_only_True = show_only_True
+        self.random_init = random_init
 
         # TODO: this does not do anything
         if self.show_only_True:
@@ -289,7 +290,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # self.get_current_gate_voltages(show=self.show, return_value=False)  # update
 
         # Then measure
-        self.measurement.measure(show=self.show, random_init=False)  # use_seed = False by default
+        self.measurement.measure(show=self.show, random_init=self.random_init)  # use_seed = False by default
         """ disabled the normalization as it has to take care of the physical value of steepest slope """
         # state = self._normalize_obs(self.measurement.data.data)  # has additional dim, final shape : (3, resolution)
 

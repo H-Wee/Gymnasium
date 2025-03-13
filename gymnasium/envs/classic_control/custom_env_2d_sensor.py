@@ -251,8 +251,8 @@ class SensorEnv2DSimple(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measuremen
             dv.value(self.init_gate_voltages[gate_name] - 1e-5)  # can throw some errors
         self.get_current_gate_voltages(show=self.show, return_value=False)  # update
 
-        # Then measure
-        self.measurement.measure(show=self.show)  # use_seed = False by default
+        # Then measure  # NOTE: randomization added 11.03.2025 --> not here!
+        self.measurement.measure(show=self.show, random_init=True)  # use_seed = False by default
         """ disabled the normalization as it has to take care of the physical value of steepest slope """
         # state = self._normalize_obs(self.measurement.data.data)  # has additional dim, final shape : (3, resolution)
 
