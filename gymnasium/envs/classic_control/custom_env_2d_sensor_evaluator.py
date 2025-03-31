@@ -200,7 +200,8 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # =======================
         self.action = None
         self.reward = 0.
-        self.ana_reward = 0.
+        self.extra_reward = 0.
+        self.exp_adapt_reward = 0.
         self.termination_reward = 0.
         self.reward_scale = None
 
@@ -214,14 +215,6 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         else:
             device = torch.device('cpu')
             print("Using CPU")
-
-    def get_current_gate_voltages(self, show=True, return_value=True):
-        self.current_gate_voltages = {k: v.value() for k, v in self.device_parameter.items()}
-        if show:
-            print_dict_pretty(self.current_gate_voltages)
-
-        if return_value:
-            return self.current_gate_voltages
 
     def _normalize_action(self, action):
         # Perform min-max scaling
@@ -258,7 +251,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         normalized_obs = norm_factor * (high_b - lower_b) + lower_b
         return normalized_obs
 
-    # def reset(self):
+
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
 
         super().reset(seed=seed)
@@ -434,9 +427,148 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         #   reward
         # ====================
         # reset extra reward
+        # extra_reward = 0.
+
+
+        # -----------------------------
+        # add up all ana rewards
+        # -----------------------------
+
+        # extra_reward += peaks_reward  # was missing? --> not included
+
+        # extra_reward += slope_reward
+        # extra_reward += dyn_reward
+        # extra_reward += del_pinc_stds_reward
+
+        # barrier calibration reward
+        # extra_reward += noise_lvl_reward
+        # extra_reward += oow_n_peaks_reward
+        # extra_reward += has_coulomb_reward
+
+        extra_reward = self.extra_reward_function()
+        self.extra_reward = extra_reward
+
+        """ 
+        =============================================================================
+            terminate condition:
+                above threshold
+
+            thresholds = {'steepest_slope': 0.5,   # 10 too low   0.5 too high --->
+                          'dynamic_range': 35,     # 40 seems never reachable
+                          'peaks': 1,
+                         }
+            UPDATE: removed gauss fitting threshold
+            UPDATE (13.01.2025)
+            1) Avg Slope >
+            2) Avg Dyn >
+            3) N peaks > all
+            
+            these need some thoughts ... 
+            4) has_coulomb all?
+            5) peak increasing ----> this fitting indicate how irregular the peaks are so maybe necessary ... 
+            
+            UPDATE (20.03.2025)
+            1) Avg Slope >
+            2) Avg Dyn >
+            3) N peaks > all
+            
+        =============================================================================
+        """
+        terminated = False
+
+        #         all(oow_n_peaks_passed_bool) and \
+        #         self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:  # added n_peaks!
+        """ HERE it has terminate conditions --------------------------------------------------------------------- """
+        termination_conds = (abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope']
+                             and self.avg_dyn >= self.thresholds['dynamic_range']
+                             and self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std'])
+
+
+        # if all(self.has_coulombs):   # all(oow_n_peaks_passed_bool):
+        # if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and \
+        #         self.avg_dyn >= self.thresholds['dynamic_range'] and \
+        #         self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:
+        if termination_conds:
+
+                # TODO: add condition like sufficient current!
+
+                # self.avg_n_peaks >= self.thresholds['peaks'] and \
+
+            terminated = True
+            if self.show_only_True:
+                # print(f"{self.show_ana=}")
+                self.evaluator.evaluate(
+                                        peak_wheel_pars=self.ana_pars['peak_wheel_pars'],  #  self.evaluator.default_peak_wheel_pars,
+                                        smooth_wheel_pars=self.ana_pars['smooth_wheel_pars'],   # self.evaluator.default_smooth_wheel_pars,
+                                        show=self.show_ana,   # True, make it possible to see only measurement
+                                        auto_plot=True,  # self.show_ana, #  True,  <--- always show measurement
+                                        **kwargs)  # <--- **kwargs not working then TODO !!!!
+
+
+        if terminated:
+            termination_reward = 10  # 100.  # too much? ^^"
+        else:
+            termination_reward = -10  # -100.  # How to scale this? T-T
+        self.termination_reward = termination_reward
+
+        tot_reward_ = extra_reward + termination_reward
+
+        reward_scale = 1e2
+        self.reward_scale = reward_scale
+
+        tot_reward = tot_reward_ / reward_scale  #  # 1e1  # 1e3  # scaling
+        self.reward = tot_reward
+
+
+        # dist_passed_rewards = {'slope': [slope_dist, slope_passed, slope_reward],
+        #                        'dyn': [dyn_dist, dyn_passed, dyn_reward],
+        #                        'n_peaks': [peaks_dist, n_peak_passed, peaks_reward],    # note: neglected
+        #                        'oof_n_peaks': [oow_n_peaks_passed, oow_n_peaks_passed_bool, oow_n_peaks_reward],  # [0, oow_n_peaks_passed_bool, oow_n_peaks_reward],
+        #                        'peak_increasing': [del_pinc_stds_dist, peak_inc_fit_passed, del_pinc_stds_reward],
+        #                        'noise_level': [noise_lvl_passed_bool, noise_lvl_passed, noise_lvl_reward],  # [0, noise_lvl_passed, noise_lvl_reward],
+        #
+        #                         # has_coulomb_passed : str  has_coulomb_list: bool
+        #                        'has_coulomb': [0, has_coulomb_passed, has_coulomb_reward],  # a list, exception # fixme: maybe not needed?
+        #                        'curr_status': [0, curr_status_list, 0.],
+        #
+        #                        # FIxme: shouldn't we put the dist to the target value for the ind n_peaks and noise level too?
+        #                        }
+        #
+        # self.dist_passed_rewards = dist_passed_rewards
+
+        if show:   # self.show:
+            self.print_tables(termination_reward=termination_reward, extra_reward=extra_reward,
+                              tot_reward=tot_reward, tot_reward_=tot_reward_, terminated=terminated)
+            print(
+                f'============================================================================================='
+                f'=============================================================================================')
+        else:
+            if self.show_only_True and terminated:
+                self.print_tables(termination_reward=termination_reward, extra_reward=extra_reward,
+                                  tot_reward=tot_reward, tot_reward_=tot_reward_, terminated=terminated)
+                print(
+                    f'============================================================================================='
+                    f'=============================================================================================')
+        info = {}
+
+        return self._get_obs(), tot_reward, terminated, False, info
+
+    def extra_reward_function(self):
+        """
+            performs analysis and gives reward
+            addes on top of termination reward
+        Returns:
+
+        """
+        """ 
+            Only following rewards are standard for reward shaping AND termination 20.03.2025
+            
+            1) slope
+            2) dynamic range
+            3) peak increasing fit
+        """
         extra_reward = 0.
 
-        """ now change to average across 3 different sweeps """
         # ===========
         #  slope
         # ===========
@@ -469,23 +601,6 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
             dyn_reward = 10  # 50.
             dyn_passed = 'O'
 
-        # ============================================================
-        #  n_peaks (no meaningful for BBP sweeps) --> NOTE it is!
-        # ============================================================
-        self.avg_n_peaks = self.evaluator.ana_results['n_peaks']['avg']
-        assert self.avg_n_peaks is not None
-        n_peak_passed = 'X'
-        peaks_reward = 0.
-        if self.avg_n_peaks < self.thresholds['peaks']:
-            peaks_dist = self.thresholds['peaks'] - self.avg_n_peaks
-            # peaks_reward = abs(self.avg_n_peaks) / self.thresholds['peaks'] - 1.
-            # peaks_reward *= 10  # maybe try it?
-        else:
-            # dyn_reward  = abs(self.ana.dynamic_range - self.thresholds['dynamic_range']) *2
-            peaks_dist = 0.
-            # peaks_reward = 10  # 50.
-            n_peak_passed = 'O'
-
         # ==============================
         #  peak increasing fitting std
         # ==============================
@@ -502,9 +617,58 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
             del_pinc_stds_reward = 10  # 50.
             peak_inc_fit_passed = 'O'
 
+        exp_dist_passed_rewards = self.get_exp_reward()
+        dist_passed_rewards = {'slope': [slope_dist, slope_passed, slope_reward],
+                               'dyn': [dyn_dist, dyn_passed, dyn_reward],
+                               'peak_increasing': [del_pinc_stds_dist, peak_inc_fit_passed, del_pinc_stds_reward],
+                               **exp_dist_passed_rewards,
+                                # exp adaption
+                               # 'n_peaks': [peaks_dist, n_peak_passed, peaks_reward],    # note: neglected
+                               # 'oof_n_peaks': [oow_n_peaks_passed, oow_n_peaks_passed_bool, oow_n_peaks_reward],  # [0, oow_n_peaks_passed_bool, oow_n_peaks_reward],
+                               # 'noise_level': [noise_lvl_passed_bool, noise_lvl_passed, noise_lvl_reward],  # [0, noise_lvl_passed, noise_lvl_reward],
+                               # 'has_coulomb': [0, has_coulomb_passed, has_coulomb_reward],  # a list, exception # fixme: maybe not needed?
+                               # 'curr_status': [0, curr_status_list, 0.],
+
+                               # FIxme: shouldn't we put the dist to the target value for the ind n_peaks and noise level too?
+                               }
+
+        self.dist_passed_rewards = dist_passed_rewards
+
+        extra_reward += slope_reward
+        extra_reward += dyn_reward
+        extra_reward += del_pinc_stds_reward
+
+        return extra_reward
+
+    def get_exp_reward(self):
         """
-           intermediate rewards:
+            This is only for experimental reward
+
+        Returns:
+
         """
+        """
+            Following rewards are used for experimental adaption
+        """
+        exp_adapt_reward = 0.
+        # ============================================================
+        #  n_peaks (no meaningful for BBP sweeps) --> NOTE it is!
+        # ============================================================
+        self.avg_n_peaks = self.evaluator.ana_results['n_peaks']['avg']
+        assert self.avg_n_peaks is not None
+        n_peak_passed = 'X'
+        peaks_reward = 0.
+        if self.avg_n_peaks < self.thresholds['peaks']:
+            peaks_dist = self.thresholds['peaks'] - self.avg_n_peaks
+            # peaks_reward = abs(self.avg_n_peaks) / self.thresholds['peaks'] - 1.
+            # peaks_reward *= 10  # maybe try it?
+        else:
+            # dyn_reward  = abs(self.ana.dynamic_range - self.thresholds['dynamic_range']) *2
+            peaks_dist = 0.
+            # peaks_reward = 10  # 50.
+            n_peak_passed = 'O'
+        # NOTE: not included
+
         # ===============
         #  noise level
         # ===============
@@ -525,12 +689,13 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         else:
             print("[warning] No noise level defined. This is make the barrier calibration less robust.")
         # extra_reward += noise_lvl_reward
+        exp_adapt_reward += noise_lvl_reward
 
         # TODO: does not really help for the out of range but maybe?
 
-        # ========================
-        #  out of window 2: peaks
-        # ========================
+        # ========================================
+        #  out of window 2: peaks (N peaks indiv)
+        # ========================================
         oow_n_peaks_passed = []
         oow_n_peaks_passed_bool = []
         oow_n_peaks_reward = 0
@@ -538,12 +703,20 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         for oow_n_peak in self.n_peaks:
             # for each line cut
             if oow_n_peak < self.thresholds['peaks']:
-                oow_n_peaks_reward -= 25   # 25  # 50
+                oow_n_peaks_reward -= 25  # 25  # 50
                 oow_n_peaks_passed.append('X')
+                oow_n_peaks_passed_bool.append(False)
+
+            # NOTE: added additional as lowering prominence for peak detection lead to too many peaks detection 20.03.2025
+            elif oow_n_peak > 2 * self.thresholds['peaks']:  # so if threshold = 3, more than 6 peaks will be punished
+                oow_n_peaks_reward -= 25  # 25  # 50
+                oow_n_peaks_passed.append("X'")
                 oow_n_peaks_passed_bool.append(False)
             else:
                 oow_n_peaks_passed.append('O')
                 oow_n_peaks_passed_bool.append(True)
+
+        exp_adapt_reward += oow_n_peaks_reward
 
         # =============================
         #   has_coulomb & curr status
@@ -552,7 +725,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         has_coulomb_passed_bool = []
         has_coulomb_reward = 0
         self.has_coulombs = self.evaluator.ana_results['has_coulomb']['results']  # a list of bools
-        for has_coulomb in self.has_coulombs:   # for each line cut
+        for has_coulomb in self.has_coulombs:  # for each line cut
             if not has_coulomb:
                 has_coulomb_reward -= 50  # 50
                 has_coulomb_passed.append('X')
@@ -561,121 +734,46 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                 has_coulomb_passed.append('O')
                 has_coulomb_passed_bool.append(True)
         has_coulomb_list = [hc for hc in self.has_coulombs]  # a list
+        exp_adapt_reward += has_coulomb_reward
 
         # TODO: curr status as well? or is it overlapping with noise_level there
         self.curr_statuses = self.evaluator.ana_results['curr_status']['results']  # a list of str
         curr_status_list = [cs for cs in self.curr_statuses]  # a list
+        # NOTE: not added to exp_adapt_reward, let's see if current is critical ...
 
+        exp_dist_passed_rewards = {
+                                    'n_peaks': [peaks_dist, n_peak_passed, peaks_reward],  # note: neglected
+                                    'oof_n_peaks': [oow_n_peaks_passed, oow_n_peaks_passed_bool,
+                                                    oow_n_peaks_reward],  # [0, oow_n_peaks_passed_bool, oow_n_peaks_reward],
+                                    'noise_level': [noise_lvl_passed_bool, noise_lvl_passed,
+                                                    noise_lvl_reward],  # [0, noise_lvl_passed, noise_lvl_reward],
+                                    'has_coulomb': [0, has_coulomb_passed, has_coulomb_reward],  # a list, exception # fixme: maybe not needed?
+                                    'curr_status': [0, curr_status_list, 0.],
+                                    }
 
-        # -----------------------------
-        # add up all ana rewards
-        # -----------------------------
+        self.exp_adapt_reward = exp_adapt_reward
+        return exp_dist_passed_rewards
 
-        # extra_reward += peaks_reward  # was missing? --> not included
+    """
+    # ====================
+    #     Obs
+    # ====================
+    """
+    def _get_obs(self):  # --> returns state
+        state = self.state
+        assert state.shape == (3, self.resolution)  # hardcoded
 
-        extra_reward += slope_reward
-        extra_reward += dyn_reward
-        extra_reward += del_pinc_stds_reward
+        if not self.observation_space.contains(state):
+            # Adjust the initial observation to ensure it falls within the observation space
+            env_logger.warning(
+                f"[warning] The observation {state} is not within the observation space {self.observation_space}. We clip it.")
+            state = np.clip(state, self.observation_space.low, self.observation_space.high)
 
-        # barrier calibration reward
-        # extra_reward += noise_lvl_reward
-        # extra_reward += oow_n_peaks_reward
-        # extra_reward += has_coulomb_reward
+        return state
 
-        self.ana_reward = extra_reward
-
-        """ 
-        =============================================================================
-            terminate condition:
-                above threshold
-
-            thresholds = {'steepest_slope': 0.5,   # 10 too low   0.5 too high --->
-                          'dynamic_range': 35,     # 40 seems never reachable
-                          'peaks': 1,
-                         }
-            UPDATE: removed gauss fitting threshold
-            UPDATE (13.01.2025)
-            1) Avg Slope >
-            2) Avg Dyn >
-            3) N peaks > all
-            
-            these need some thoughts ... 
-            4) has_coulomb all?
-            5) peak increasing ----> this fitting indicate how irregular the peaks are so maybe necessary ... 
-            
-            
-        =============================================================================
-        """
-        terminated = False
-
-        #         all(oow_n_peaks_passed_bool) and \
-        #         self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:  # added n_peaks!
-        """ HERE it has terminate conditions --------------------------------------------------------------------- """
-        # if all(self.has_coulombs):   # all(oow_n_peaks_passed_bool):
-        if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and \
-                self.avg_dyn >= self.thresholds['dynamic_range'] and \
-                self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:
-
-                # TODO: add condition like sufficient current!
-
-                # self.avg_n_peaks >= self.thresholds['peaks'] and \
-
-            terminated = True
-            if self.show_only_True:
-                # print(f"{self.show_ana=}")
-                self.evaluator.evaluate(
-                                        peak_wheel_pars=self.ana_pars['peak_wheel_pars'],  #  self.evaluator.default_peak_wheel_pars,
-                                        smooth_wheel_pars=self.ana_pars['smooth_wheel_pars'],   # self.evaluator.default_smooth_wheel_pars,
-                                        show=self.show_ana,   # True, make it possible to see only measurement
-                                        auto_plot=True,  # self.show_ana, #  True,  <--- always show measurement
-                                        **kwargs)  # <--- **kwargs not working then TODO !!!!
-
-
-        if terminated:
-            termination_reward = 10  # 100.  # too much? ^^"
-        else:
-            termination_reward = -10  # -100.  # How to scale this? T-T
-        self.termination_reward = termination_reward
-
-        tot_reward_ = extra_reward + termination_reward
-
-        reward_scale = 1e2
-        tot_reward = tot_reward_ / reward_scale  #  # 1e1  # 1e3  # scaling
-        self.reward = tot_reward
-        self.reward_scale = reward_scale
-
-        dist_passed_rewards = {'slope': [slope_dist, slope_passed, slope_reward],
-                               'dyn': [dyn_dist, dyn_passed, dyn_reward],
-                               'n_peaks': [peaks_dist, n_peak_passed, peaks_reward],    # note: neglected
-                               'oof_n_peaks': [oow_n_peaks_passed, oow_n_peaks_passed_bool, oow_n_peaks_reward],  # [0, oow_n_peaks_passed_bool, oow_n_peaks_reward],
-                               'peak_increasing': [del_pinc_stds_dist, peak_inc_fit_passed, del_pinc_stds_reward],
-                               'noise_level': [noise_lvl_passed_bool, noise_lvl_passed, noise_lvl_reward],  # [0, noise_lvl_passed, noise_lvl_reward],
-
-                                # has_coulomb_passed : str  has_coulomb_list: bool
-                               'has_coulomb': [0, has_coulomb_passed, has_coulomb_reward],  # a list, exception # fixme: maybe not needed?
-                               'curr_status': [0, curr_status_list, 0.],
-
-                               # FIxme: shouldn't we put the dist to the target value for the ind n_peaks and noise level too?
-                               }
-
-        self.dist_passed_rewards = dist_passed_rewards
-
-        if show:   # self.show:
-            self.print_tables(termination_reward=termination_reward, extra_reward=extra_reward,
-                              tot_reward=tot_reward, tot_reward_=tot_reward_, terminated=terminated)
-            print(
-                f'============================================================================================='
-                f'=============================================================================================')
-        else:
-            if self.show_only_True and terminated:
-                self.print_tables(termination_reward=termination_reward, extra_reward=extra_reward,
-                                  tot_reward=tot_reward, tot_reward_=tot_reward_, terminated=terminated)
-                print(
-                    f'============================================================================================='
-                    f'=============================================================================================')
-        info = {}
-
-        return self._get_obs(), tot_reward, terminated, False, info
+    def get_observation(self):
+        # Public method to access the observation result
+        return self._get_obs()
 
     """
     # ====================
@@ -783,33 +881,9 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
     """
     # ====================
-    #     Obs
-    # ====================
-    """
-
-    def _get_obs(self):  # --> returns state
-        state = self.state
-        assert state.shape == (3, self.resolution)  # hardcoded
-
-        if not self.observation_space.contains(state):
-            # Adjust the initial observation to ensure it falls within the observation space
-            env_logger.warning(
-                f"[warning] The observation {state} is not within the observation space {self.observation_space}. We clip it.")
-            state = np.clip(state, self.observation_space.low, self.observation_space.high)
-
-        return state
-
-    def get_observation(self):
-        # Public method to access the observation result
-        return self._get_obs()
-
-    """
-    # ====================
     #     GATEs (always stick to device parameter order)
     # ====================
     """
-
-    # TODO: check if already this function exists somewhere  --> private?
     def get_current_gate_voltages(self, show=True, return_value=True):
         self.current_gate_voltages = {k: v.value() for k, v in self.device_parameter.items()}
         if show:
