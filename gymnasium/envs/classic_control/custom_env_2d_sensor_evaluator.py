@@ -313,8 +313,27 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # print("Resetting Done ================================================================================================")
         #
 
+    def measure_wo_reset(self):
+        # Then measure
+        self.measurement.measure(show=self.show)  # use_seed = False by default
+        """ disabled the normalization as it has to take care of the physical value of steepest slope """
 
-        return state, info
+        state = self.measurement.data[0].data  # returns a tuple of 1D [0] and 2D [1]
+        self.state = state
+        self.data_x = self.measurement.data[0].x.data  # the same shape: (3, resolution)
+        self.dataitem = self.measurement.data[0]
+
+        """ !!! The thing is simulation resolution and line cut resolution can be different """
+        if len(self.state[0]) != self.resolution:
+            state = np.array([down_sample_1d(tm_s, self.resolution) for tm_s in state])
+            self.state = state
+
+        if not self.observation_space.contains(state):
+            print(
+                f"[warning] The init observation {state} is not within the observation space {self.observation_space}. We clip it.")
+            state = np.clip(state, self.observation_space.low, self.observation_space.high)
+
+        return state
 
     def step(self, action, use_seed=False, **kwargs):  # debug True for now  stepsizes ---> give error
         if self.show_only_True:  # turn off temporarily
