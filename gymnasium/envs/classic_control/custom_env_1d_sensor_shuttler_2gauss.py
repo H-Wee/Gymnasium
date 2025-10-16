@@ -25,7 +25,7 @@ from tuning_toolkit.framework.autorunner_ana_1d import Ana1D
 # from tuning_toolkit.framework.autorunner_utils import *
 
 # from tuning_toolkit.framework.lead_transition_simulation import *
-from tuning_toolkit.framework.autorunner_sensor_sim import gaussian_dist
+from tuning_toolkit.simulation.autorunner_basic_simulation import gaussian_dist
 
 # ========= logging
 # Configure basic logging settings

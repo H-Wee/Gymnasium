@@ -28,7 +28,7 @@ from tuning_toolkit.framework.autorunner_utils_old import print_dict_pretty
 # from tuning_toolkit.framework.autorunner_utils import *
 
 # from tuning_toolkit.framework.lead_transition_simulation import *
-from tuning_toolkit.framework.autorunner_sensor_sim import gaussian_dist
+from tuning_toolkit.simulation.autorunner_basic_simulation import gaussian_dist
 
 # ========= logging
 # Configure basic logging settings

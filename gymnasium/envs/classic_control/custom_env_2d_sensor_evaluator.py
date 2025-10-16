@@ -32,7 +32,9 @@ from tuning_toolkit.framework.autorunner_ana_1d import Ana1D
 
 # from tuning_toolkit.framework.lead_transition_simulation import *
 # from tuning_toolkit.framework.lead_transition_simulation import gaussian_dist
-from tuning_toolkit.framework.autorunner_sensor_sim import *
+
+# from tuning_toolkit.framework.autorunner_sensor_sim import * # refactored
+from tuning_toolkit.simulation.autorunner_basic_simulation import *
 
 from tuning_toolkit.framework.autorunner_ana_1d import *  # Ana1D
 

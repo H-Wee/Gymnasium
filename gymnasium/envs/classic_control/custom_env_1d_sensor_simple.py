@@ -15,13 +15,13 @@ import pylab
 from typing import Union, List, Dict, Callable, Any, Optional
 
 import tuning_toolkit.framework as ttf
-from tuning_toolkit.framework.autorunner_basic_functions import *
+# from tuning_toolkit.framework.autorunner_basic_functions import *
 from tuning_toolkit.framework.autorunner_ana_1d import *
 # from tuning_toolkit.framework.autorunner_ana_2d import *
 from tuning_toolkit.framework.autorunner_utils_old import *
 
-from tuning_toolkit.simulation.lead_transition_simulation import *
-from tuning_toolkit.framework.autorunner_sensor_sim import gaussian_dist
+from tuning_toolkit.simulation.autorunner_lead_simulation import *
+from tuning_toolkit.simulation.autorunner_basic_simulation import gaussian_dist
 
 # ========= logging
 # Configure basic logging settings
