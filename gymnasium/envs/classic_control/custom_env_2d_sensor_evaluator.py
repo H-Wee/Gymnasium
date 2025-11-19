@@ -207,6 +207,8 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         self.termination_reward = 0.
         self.reward_scale = None
 
+        self.is_reset = False
+
         # ===========
         #  Check cuda
         # ===========
@@ -314,6 +316,10 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         # self.device_parameter['BBL'].value(self.device_parameter['BBL'].bounds[0])
         # print("Resetting Done ================================================================================================")
         #
+
+        self.is_reset = True
+
+        return state
 
     def measure_wo_reset(self):
         # Then measure
