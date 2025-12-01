@@ -206,6 +206,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         self.exp_adapt_reward = 0.
         self.termination_reward = 0.
         self.reward_scale = None
+        self.terminated = False
 
         self.is_reset = False
 
@@ -263,39 +264,21 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
         if self.show_only_True:
             self.show = False
-            # self.show_ana = False
 
         # SEt init gate
         if self.show:
             print(f"[info] Reset all gates to initial values.")
         for gate_i, (gate_name, dv) in enumerate(self.device_parameter.items()):
-            # print(f"[info] Reset action {self.init_gate_voltages[gate_name]:3f} V will be applied to {gate_name}")  # too wordy
-            # print(f"[info] Reset {gate_name}: {self.init_gate_voltages[gate_name]:3f} V")
             dv.value(self.init_gate_voltages[gate_name] - 1e-5)  # can throw some errors
-        # self.get_current_gate_voltages(show=self.show, return_value=False)  # update
-
-
-        # TODO: remove this later --> manually setting barrier gates
-        # random_b1 = np.random.uniform(*self.device_parameter['TBL'].bounds)
-        # random_b2 = np.random.uniform(*self.device_parameter['BBL'].bounds)
-        # self.device_parameter['TBL'].value(random_b1)   # self.device_parameter['TBL'].bounds[0]
-        # self.device_parameter['BBL'].value(random_b2)  # self.device_parameter['BBL'].bounds[0])
-        # if self.show:
-        #     print(
-        #             f"Setting TBL={random_b1:.3f}, BBL={random_b2:.3f}.")
-        #     print("Resetting Done ================================================================================================")
-        # self.get_current_gate_voltages(show=self.show, return_value=False)  # update
 
         # Then measure
         self.measurement.measure(show=self.show, random_init=self.random_init)  # use_seed = False by default
         """ disabled the normalization as it has to take care of the physical value of steepest slope """
-        # state = self._normalize_obs(self.measurement.data.data)  # has additional dim, final shape : (3, resolution)
 
+        # init data
         state = self.measurement.data[0].data  # returns a tuple of 1D [0] and 2D [1]
         self.state = state
-        # state = self.normalize_obs(self.measurement.data.data.flatten())  # self.measurement.data.data.flatten()
         self.data_x = self.measurement.data[0].x.data  # the same shape: (3, resolution)
-        # self.state = state
         self.dataitem = self.measurement.data[0]
 
         """ !!! The thing is simulation resolution and line cut resolution can be different """
@@ -307,15 +290,6 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
             print(
                 f"[warning] The init observation {state} is not within the observation space {self.observation_space}. We clip it.")
             state = np.clip(state, self.observation_space.low, self.observation_space.high)
-
-        # reset reward needed? maybe not
-
-        # # TODO: remove this later
-        # print(f"Setting TBL={self.device_parameter['TBL'].bounds[0]:.3f}, BBL={self.device_parameter['BBL'].bounds[0]:.3f}.")
-        # self.device_parameter['TBL'].value(self.device_parameter['TBL'].bounds[0])
-        # self.device_parameter['BBL'].value(self.device_parameter['BBL'].bounds[0])
-        # print("Resetting Done ================================================================================================")
-        #
 
         self.is_reset = True
 
@@ -499,17 +473,35 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
             2) Avg Dyn >
             3) N peaks > all
             
+            UPDATE (19.11.2025)
+            1) Global Trend
+            2) Peak Correlation
+            
         =============================================================================
         """
-        terminated = False
+        self.terminated = False  # reinit??? TODO: check if this is ok
 
         #         all(oow_n_peaks_passed_bool) and \
         #         self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:  # added n_peaks!
         """ HERE it has terminate conditions --------------------------------------------------------------------- """
-        termination_conds = (abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope']
-                             and self.avg_dyn >= self.thresholds['dynamic_range']
-                             and self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std'])
+        # termination_conds = (abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope']
+        #                      and self.avg_dyn >= self.thresholds['dynamic_range']
+        #                      and self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std'])
 
+
+
+        """
+            19.11.2025 Now changed to new termination
+            
+            - [ ] check whether previous termination condition should be also added 
+        """
+
+        passed = not self.evaluator.data['verdict_results']['fail']   # this include step 1 (trend) and 2 (peak corr)
+        mean_corr = self.evaluator.data['verdict_results']['mean_corr']
+
+        termination_conds = passed
+
+        print(f"Terminated = {termination_conds}, {self.evaluator.data['verdict_results']=}")
 
         # if all(self.has_coulombs):   # all(oow_n_peaks_passed_bool):
         # if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and \
@@ -517,11 +509,11 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         #         self.sum_peaks_inc_std <= self.thresholds['sum_peaks_inc_std']:
         if termination_conds:
 
-                # TODO: add condition like sufficient current!
+            # TODO: add condition like sufficient current!
 
                 # self.avg_n_peaks >= self.thresholds['peaks'] and \
 
-            terminated = True
+            self.terminated = True
             if self.show_only_True:
                 # print(f"{self.show_ana=}")
                 self.evaluator.evaluate(
@@ -532,7 +524,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                                         **kwargs)  # <--- **kwargs not working then TODO !!!!
 
 
-        if terminated:
+        if self.terminated:
             termination_reward = 10  # 100.  # too much? ^^"
         else:
             termination_reward = -10  # -100.  # How to scale this? T-T
@@ -565,20 +557,20 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
         if show:   # self.show:
             self.print_tables(termination_reward=termination_reward, extra_reward=extra_reward,
-                              tot_reward=tot_reward, tot_reward_=tot_reward_, terminated=terminated)
+                              tot_reward=tot_reward, tot_reward_=tot_reward_, terminated=self.terminated)
             print(
                 f'============================================================================================='
                 f'=============================================================================================')
         else:
-            if self.show_only_True and terminated:
+            if self.show_only_True and self.terminated:
                 self.print_tables(termination_reward=termination_reward, extra_reward=extra_reward,
-                                  tot_reward=tot_reward, tot_reward_=tot_reward_, terminated=terminated)
+                                  tot_reward=tot_reward, tot_reward_=tot_reward_, terminated=self.terminated)
                 print(
                     f'============================================================================================='
                     f'=============================================================================================')
         info = {}
 
-        return self._get_obs(), tot_reward, terminated, False, info
+        return self._get_obs(), tot_reward, self.terminated, False, info
 
     def extra_reward_function(self):
         """
