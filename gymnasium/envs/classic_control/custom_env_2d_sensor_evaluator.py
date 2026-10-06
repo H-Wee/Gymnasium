@@ -221,7 +221,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
             device = torch.device('cpu')
             print("Using CPU")
 
-    def _normalize_action(self, action):
+    def normalize_action(self, action):
         # Perform min-max scaling
         """
         normalize based on
@@ -350,7 +350,7 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
 
         action_ = action
         # print(action_)
-        action = self._normalize_action(action_)
+        action = self.normalize_action(action_)  # NOTE: had to undo private function
         # print(action)
 
         if not self.action_space.contains(action):
@@ -497,11 +497,12 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
         """
 
         passed = not self.evaluator.data['verdict_results']['fail']   # this include step 1 (trend) and 2 (peak corr)
-        mean_corr = self.evaluator.data['verdict_results']['mean_corr']
+        # mean_corr = self.evaluator.data['verdict_results']['mean_corr']
+        final_res = self.evaluator.data['verdict_results']['final_res']
 
         termination_conds = passed
 
-        print(f"Terminated = {termination_conds}, {self.evaluator.data['verdict_results']=}")
+        print(f"Terminated = {termination_conds}") # , {self.evaluator.data['verdict_results']=}")
 
         # if all(self.has_coulombs):   # all(oow_n_peaks_passed_bool):
         # if abs(self.avg_steepest_slope) >= self.thresholds['steepest_slope'] and \
@@ -948,7 +949,8 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                 print(
                     f'[warning] The gate {gate_name} has reached its boundary {self.device_parameter[gate_name].bounds}. '
                     f'We clip the value to {value} to {high_bound - 1e-5}')
-            self.device_parameter[gate_name].value(value, soft_fail=False)
+            # self.device_parameter[gate_name].value(value, soft_fail=False)
+            self.device_parameter[gate_name].ramp_value(value, rate=1.0)
             # at_bounds = True
 
         elif value < low_bound:  # add more constraint  --> No..
@@ -957,11 +959,13 @@ class SensorEnv2DEval(gym.Env, ttf.skeleton.Evaluator, ttf.skeleton.Measurement,
                 print(
                     f'[warning] The gate {gate_name} has reached its boundary {self.device_parameter[gate_name].bounds}. '
                     f'We clip the value to {value} to {low_bound + 1e-5}')
-            self.device_parameter[gate_name].value(value, soft_fail=False)
+            self.device_parameter[gate_name].ramp_value(value, rate=1.0)
+            # self.device_parameter[gate_name].value(value, soft_fail=False)
             # at_bounds = True
 
         else:
-            self.device_parameter[gate_name].value(value, soft_fail=False)
+            self.device_parameter[gate_name].ramp_value(value, rate=1.0)
+            # self.device_parameter[gate_name].value(value, soft_fail=False)
             # print(value)
             # at_bounds = False
 
